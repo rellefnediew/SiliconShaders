@@ -45,7 +45,7 @@ SiliconShaders is based on [mcopt](https://github.com/noahdunnagan/mcopt) by Noa
   </tr>
   <tr>
     <td><img src=".github/images/rain-reflection.jpg" alt="Rain with reflections on a glossy surface"></td>
-    <td><img src=".github/images/menu-shader-packs.jpg" alt="Shader profiles and quality presets"></td>
+    <td><img src=".github/images/menu-shader-packs.jpg" alt="Graphics menu: built-in profiles Standard and Noir, and quality levels"></td>
   </tr>
   <tr>
     <td><img src=".github/images/menu-picture.jpg" alt="Graphics menu: picture and colour settings"></td>

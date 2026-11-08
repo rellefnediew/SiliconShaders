@@ -10,11 +10,13 @@ import net.minecraft.client.renderer.state.level.CameraRenderState;
 
 /**
  * Only the first-person body needs extra preparation: Minecraft deliberately omits it from the camera pass.
- * Off under Lunar Client: its entity and feature hooks also reach this extra player submit, which then shows up as a
- * visible, lingering copy of the player in the world. -Dsiliconshaders.sun.selfShadow=true/false overrides the default.
+ * Under Lunar Client its entity and feature hooks also reach an extra player submit, which then shows up as a visible,
+ * lingering copy of the player in the world; there the body is posed and meshed by SunSelfShadowDirect instead, without a
+ * submit. -Dsiliconshaders.sun.selfShadow=submit|direct|off overrides the choice (true = submit, false = off).
  */
 public final class SunSelfShadow {
-    public static final boolean ENABLED=enabled();
+    public enum Mode { SUBMIT, DIRECT, OFF }
+    public static final Mode MODE=mode();
     public static boolean preparing;
     private static FeatureRenderDispatcher source,owner,shadowDispatcher;
     private static StagedVertexBuffer staging;
@@ -24,12 +26,12 @@ public final class SunSelfShadow {
     private static int batchCount;
     private SunSelfShadow() {}
 
-    private static boolean enabled() {
+    private static Mode mode() {
         String forced=System.getProperty("siliconshaders.sun.selfShadow");
-        if(forced!=null)return Boolean.parseBoolean(forced);
-        if(!lunarClient())return true;
-        siliconshaders.metal.Log.info("[SiliconShaders sun] Lunar Client detected: first-person body shadow off (-Dsiliconshaders.sun.selfShadow=true turns it on)");
-        return false;
+        if(forced!=null)return switch(forced.trim().toLowerCase(java.util.Locale.ROOT)){case "direct"->Mode.DIRECT;case "off","false"->Mode.OFF;default->Mode.SUBMIT;};
+        if(!lunarClient())return Mode.SUBMIT;
+        siliconshaders.metal.Log.info("[SiliconShaders sun] Lunar Client detected: first-person body shadow meshed directly, without an entity submit");
+        return Mode.DIRECT;
     }
 
     /** Lunar's launcher classes, or its mixins merged into Minecraft's feature dispatcher. */
@@ -46,8 +48,10 @@ public final class SunSelfShadow {
     public static int batchCount() { return batchCount; }
 
     public static void prepare(CameraRenderState camera) {
-        batchCount=0;finish();var minecraft=Minecraft.getInstance();var player=minecraft.player;
-        if(!ENABLED||source==null||player==null||player.isSpectator()||player.isInvisible()
+        batchCount=0;finish();
+        if(MODE==Mode.DIRECT){batchCount=SunSelfShadowDirect.prepare(camera);return;}
+        var minecraft=Minecraft.getInstance();var player=minecraft.player;
+        if(MODE==Mode.OFF||source==null||player==null||player.isSpectator()||player.isInvisible()
             ||minecraft.getCameraEntity()!=player||!minecraft.options.getCameraType().isFirstPerson())return;
         if(shadowDispatcher==null||source!=owner) {
             if(shadowDispatcher!=null){shadowDispatcher.close();staging.close();}

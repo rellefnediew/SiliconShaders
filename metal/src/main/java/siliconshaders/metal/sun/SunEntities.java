@@ -17,11 +17,18 @@ public final class SunEntities {
     public static final int BATCH_BYTES=176,MAX_BATCHES=4096;
     public static boolean collecting,uploading;
     private record Batch(StagedVertexBuffer staging,StagedVertexBuffer.Draw draw,PreparedRenderType type) { }
+    /** Geometry the mod meshed itself (SunSelfShadowDirect): camera-relative positions, quad indices. */
+    private record Direct(com.mojang.renderpearl.api.buffers.GpuBuffer vertices,com.mojang.renderpearl.api.buffers.GpuBuffer indices,com.mojang.renderpearl.api.textures.GpuTextureView view,com.mojang.renderpearl.api.textures.GpuSampler sampler,int vertexCount,int indexCount) { }
     private static final List<Batch> batches=new ArrayList<>();
+    private static final List<Direct> directs=new ArrayList<>();
     private static final Matrix4f model=new Matrix4f(),modelView=new Matrix4f();
     private SunEntities() {}
 
-    public static void begin(boolean enabled) { collecting=enabled;if(!SunSelfShadow.preparing)batches.clear(); }
+    public static void begin(boolean enabled) { collecting=enabled;if(!SunSelfShadow.preparing){batches.clear();directs.clear();} }
+
+    static void addDirect(com.mojang.renderpearl.api.buffers.GpuBuffer vertices,com.mojang.renderpearl.api.buffers.GpuBuffer indices,com.mojang.renderpearl.api.textures.GpuTextureView view,com.mojang.renderpearl.api.textures.GpuSampler sampler,int vertexCount,int indexCount) {
+        if(batches.size()+directs.size()<MAX_BATCHES)directs.add(new Direct(vertices,indices,view,sampler,vertexCount,indexCount));
+    }
 
     public static void capture(FeatureFrameContext context,List<StagedVertexBuffer.Draw> draws,List<PreparedRenderType> types) {
         if(!collecting)return;
@@ -32,7 +39,7 @@ public final class SunEntities {
         }
     }
 
-    public static int count() { return batches.size(); }
+    public static int count() { return batches.size()+directs.size(); }
 
     private static final int MAX_BOUNDS_VERTICES=1<<18;
     private static final float BOUNDS_PADDING=0.0625f;
@@ -89,6 +96,21 @@ public final class SunEntities {
             MemoryUtil.memPutInt(p+124,info.indexType()==com.mojang.renderpearl.api.pipeline.IndexType.INT?1:0);
             MemoryUtil.memPutFloat(p+136,distance);
             if(!bounds(p+144,MetalBridge.bufferAddress(info.vertexBuffer()),info.baseVertex(),((SunDrawAccess)(Object)batch.draw()).siliconshaders$sunVertexCount(),format.getVertexSize(),position.offset()))
+                for(int axis=0;axis<3;axis++){MemoryUtil.memPutFloat(p+144+4*axis,-distance);MemoryUtil.memPutFloat(p+160+4*axis,distance);}
+            count++;
+        }
+        for(var direct:directs) {
+            if(count>=MAX_BATCHES)break;
+            long p=target+(long)count*BATCH_BYTES;MemoryUtil.memSet(p,0,BATCH_BYTES);
+            MemoryUtil.memPutLong(p,MetalBridge.useBuffer(encoder,direct.vertices()));
+            MemoryUtil.memPutLong(p+8,MetalBridge.useBuffer(encoder,direct.indices()));
+            MemoryUtil.memPutLong(p+16,MetalBridge.viewHandle(direct.view()));
+            MemoryUtil.memPutLong(p+24,MetalBridge.samplerHandle(direct.sampler()));
+            model.identity().getToAddress(p+32); // already camera-relative
+            MemoryUtil.memPutInt(p+96,SunSelfShadowDirect.STRIDE);MemoryUtil.memPutInt(p+100,0);MemoryUtil.memPutInt(p+104,SunSelfShadowDirect.UV);MemoryUtil.memPutInt(p+108,SunSelfShadowDirect.COLOR);
+            MemoryUtil.memPutInt(p+112,direct.indexCount());MemoryUtil.memPutInt(p+116,0);MemoryUtil.memPutInt(p+120,0);MemoryUtil.memPutInt(p+124,1);
+            MemoryUtil.memPutFloat(p+136,distance);
+            if(!bounds(p+144,MetalBridge.bufferAddress(direct.vertices()),0,direct.vertexCount(),SunSelfShadowDirect.STRIDE,0))
                 for(int axis=0;axis<3;axis++){MemoryUtil.memPutFloat(p+144+4*axis,-distance);MemoryUtil.memPutFloat(p+160+4*axis,distance);}
             count++;
         }

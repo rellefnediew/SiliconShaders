@@ -2,6 +2,9 @@
 
 ## 0.3.0-alpha.5
 
+- Lunar Client: your own body casts a shadow in first person again. The mod now poses and meshes the shadow body
+  itself instead of submitting an extra player, so no visible copy can appear. Under Lunar the body shadow leaves out
+  armor, held items and cosmetics.
 - New camera effect: **film grain** (Camera → Film grain). Fine, moving grain that is strongest in midtones and
   changes 24 times a second like real film. Settings: strength and grain size. Off by default.
   It is the last step of the existing camera pass and costs about 0.05 ms per frame at 1080p on an M1 Pro when another

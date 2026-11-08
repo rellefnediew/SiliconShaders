@@ -2,12 +2,41 @@
 
 ## 0.3.0-alpha.5
 
+- Noir joins Standard as a bundled, protected profile, retaining all 312 settings from the saved Noir profile.
+  Saving edits creates and selects a Noir copy; selecting unchanged Noir does not create a personal copy.
+
+- Rain and thunder drop brightness/opacity are applied at the final vertex consumer, preventing Lunar's weather color
+  from overwriting the sliders. Rain wind can be off without bypassing drop color; snow keeps its vanilla rendering.
+
+- Bundled profiles are protected. Saving a changed Standard profile creates and activates a personal copy automatically;
+  leaving an unchanged Standard profile selected creates no copy. Settings, the new profile and its active selection
+  are saved in one transaction. Saving while editing establishes the saved settings as the new cancel baseline.
+
+- Quality levels now follow the revised Low/Medium/Standard/High/Ultra settings. SSAO is off in every level; colored
+  block light is on only in Ultra; Low disables water reflections and the other levels restore their Standard strength.
+  Resolution and MetalFX are kept separate from quality selection. The Standard profile also has colored block light off.
+
+- The Standard quality button now uses the quality values from the shipped Standard profile, so that profile is correctly
+  recognized as Standard and the button restores its quality after choosing another level.
+
+- Updated Standard to the supplied 312-setting profile, with the later requested effect defaults. Standard and Noir are the bundled profiles;
+  Natural, Cinema, Maximum FPS and the three End presets are removed. Saved user profiles remain available.
+
+- Weather lighting now has separate Sun & daytime and Moon & nighttime sections. Existing rain controls are visible
+  directly; nighttime sky darkening and the nighttime thunder light factor have their own sliders. The new night
+  defaults use 25% rain darkening and retain 80% of the light in a thunderstorm, with smooth day/night transitions.
+
+- Optional Ko-fi support button in the SiliconShaders settings menu only; opens the browser without closing or saving
+  the settings draft. Compact menus show a heart with a descriptive tooltip and accessible label.
+
 - New start-up notice when Minecraft's settings differ from what the Standard profile is tuned for: a 1920-pixel-wide
-  picture (1920x1080 or 1920x1200), anisotropic 8x texture filtering and 4 mipmap levels. On wider screens it recommends
-  the MetalFX render resolution that renders about 1920 pixels wide; the mod never switches MetalFX on by itself.
+  picture (1920x1080 or 1920x1200), exclusive fullscreen, anisotropic 8x texture filtering, 4 mipmap levels and improved
+  transparency off. Apply selects and activates a supported Full HD mode, including on Retina and 4K displays.
+  If the display has no Full HD mode, it recommends a MetalFX render resolution of about 1920 pixels wide; the mod never
+  switches MetalFX on by itself. Clouds are switched off at every start, even when the notice is hidden or a world opens directly.
   Buttons: Apply, Later and Don't show again.
 - New **Standard profile**: a fresh installation starts with it, and it is the "Standard" preset in the graphics menu
-  (shadows 4096, bloom, light rays, film grain and a tuned picture). Existing settings and settings imported from MCOpt
+  (the supplied 312 settings, including quality). Existing settings and settings imported from MCOpt
   are never replaced.
 - Faster entity shadows in the distance: while the far shadow map is reused from its cache, entities (including your
   own first-person body) are drawn into a small image covering only their rectangle instead of copying and redrawing

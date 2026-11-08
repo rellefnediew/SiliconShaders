@@ -52,10 +52,10 @@ public final class SunRain {
         beginRain(thunder);if(rainColumns)MOTION.frame(SunTuning.get().values(),ticks,partial,camera.x,camera.y,camera.z);
     }
     public static com.mojang.blaze3d.vertex.VertexConsumer vertices(com.mojang.blaze3d.vertex.VertexConsumer vanilla) {
-        return rainColumns&&MOTION.changesVertices()?VERTICES.bind(vanilla):vanilla;
+        return rainColumns?VERTICES.bind(vanilla):vanilla;
     }
     public static void endRain() { rainColumns=false;VERTICES.clear(); }
-    public static int column(int vanilla,float x,float z) { if(rainColumns)MOTION.column(x,z);return column(vanilla); }
+    public static void columnPosition(float x,float z) { if(rainColumns)MOTION.column(x,z); }
     /** A column's vanilla color (white, alpha its distance fade); in rain columns our tint and opacity. */
     public static int column(int vanilla) { return rainColumns?column(vanilla,rgb,opacity):vanilla; }
     static int column(int vanilla,int rgb,float opacity) { return Math.round((vanilla>>>24)*Math.max(0,Math.min(1,opacity)))<<24|rgb; }

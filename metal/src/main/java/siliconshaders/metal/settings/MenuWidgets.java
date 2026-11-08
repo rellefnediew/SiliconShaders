@@ -51,9 +51,11 @@ final class MenuWidgets {
     }
     /** A small square button with one symbol: too narrow for Action's margins. */
     static final class Icon extends Button {
-        Icon(Component symbol,Runnable action){super(0,0,16,16,symbol,b->action.run(),DEFAULT_NARRATION);}
+        private final Component symbol;
+        Icon(Component symbol,Runnable action){this(symbol,symbol,action);}
+        Icon(Component symbol,Component label,Runnable action){super(0,0,16,16,label,b->action.run(),DEFAULT_NARRATION);this.symbol=symbol;}
         @Override protected void extractContents(GuiGraphicsExtractor g,int mouseX,int mouseY,float tick){
-            if(isHoveredOrFocused())round(g,getX(),getY(),width,height,HOVER);var font=Minecraft.getInstance().font;String text=getMessage().getString();
+            if(isHoveredOrFocused())round(g,getX(),getY(),width,height,HOVER);var font=Minecraft.getInstance().font;String text=symbol.getString();
             g.text(font,text,getX()+(width-font.width(text))/2,getY()+(height-9)/2,ACCENT,false);
         }
     }

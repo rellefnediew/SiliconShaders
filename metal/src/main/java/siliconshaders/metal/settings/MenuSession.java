@@ -5,8 +5,8 @@ import java.util.*;
 /** Named presets are immutable checkpoints. A working copy and action-level undo are separate from profile storage. */
 public final class MenuSession {
     private record Undo(Map<String,Float> values,String selected){}
-    private final GraphicsSettings runtime;private final Map<String,Float> opening;
-    private Map<String,Float> draft;private String selected;private final String openingSelected;private final Deque<Undo> history=new ArrayDeque<>();private boolean committed;
+    private final GraphicsSettings runtime;private Map<String,Float> opening;
+    private Map<String,Float> draft;private String selected,openingSelected;private final Deque<Undo> history=new ArrayDeque<>();private boolean committed;
     public MenuSession(GraphicsSettings runtime,String selected){this.runtime=runtime;this.opening=Map.copyOf(runtime.capture());this.draft=new LinkedHashMap<>(opening);this.selected=selected==null?"":selected;this.openingSelected=this.selected;}
     public Map<String,Float> values(){return Collections.unmodifiableMap(draft);}
     public float value(String key){return draft.getOrDefault(key,GraphicsCatalog.RULES.get(key).neutral());}
@@ -22,7 +22,24 @@ public final class MenuSession {
     public boolean changed(){return !draft.equals(opening)||!selected.equals(openingSelected);}
     public void undo(){Undo previous=history.pollLast();if(previous!=null){draft=new LinkedHashMap<>(previous.values());selected=previous.selected();runtime.preview(draft);}}
     public boolean matches(GraphicsProfile profile){if(profile==null)return false;for(var e:GraphicsCatalog.portable(profile.values(),profile.scope()).entrySet())if(Math.abs(value(e.getKey())-e.getValue())>.0001f)return false;return true;}
-    public void finish(ProfileStore store) throws java.io.IOException {runtime.commit(draft,store.activationDocument(selected));store.activationPublished(selected);committed=true;}
+    public boolean builtIn(){return selected.startsWith("builtin.");}
+    /** Saving while the menu stays open establishes the new cancel/undo baseline and activates the saved profile. */
+    public void saveProfile(ProfileStore store,GraphicsProfile profile) throws java.io.IOException {
+        ProfileStore.Save save=store.prepareSave(profile);runtime.commit(draft,save.documents());store.savedPublished(save);
+        selected=profile.id();opening=Map.copyOf(draft);openingSelected=selected;history.clear();committed=false;
+    }
+    public void saveCopy(ProfileStore store,String name) throws java.io.IOException {
+        saveProfile(store,snapshot(UUID.randomUUID().toString(),store.copyName(name),GraphicsProfile.Scope.ALL));
+    }
+    public void finish(ProfileStore store) throws java.io.IOException {
+        GraphicsProfile original=BundledProfiles.find(selected);finish(store,(original==null?"Profile":original.name())+" (copy)");
+    }
+    public void finish(ProfileStore store,String copyName) throws java.io.IOException {
+        GraphicsProfile original=builtIn()?BundledProfiles.find(selected):null;
+        if(builtIn()&&(original==null||!matches(original)))saveCopy(store,copyName);
+        else{runtime.commit(draft,store.activationDocument(selected));store.activationPublished(selected);}
+        committed=true;
+    }
     /** Shows other values on screen without touching the working copy: a before and after comparison. */
     public void show(Map<String,Float> values){runtime.preview(values);}
     public void showDraft(){runtime.preview(draft);}

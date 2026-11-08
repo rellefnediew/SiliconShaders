@@ -33,5 +33,8 @@ abstract class SunRainMixin {
         finally { SunRain.endRain(); }
     }
     @ModifyExpressionValue(method="prepareInstances",at=@At(value="INVOKE",target="Lnet/minecraft/util/ARGB;white(F)I"))
-    private int siliconshaders$columnColor(int vanilla,@Local(index=10) float x,@Local(index=11) float z) { return SunRain.column(vanilla,x,z); }
+    private int siliconshaders$columnPosition(int vanilla,@Local(index=10) float x,@Local(index=11) float z) {
+        // Keep vanilla's fade here. RainVertices applies tint and opacity once, after any Lunar weather color override.
+        SunRain.columnPosition(x,z);return vanilla;
+    }
 }

@@ -4,7 +4,7 @@ package siliconshaders.metal.sun;
  * Rain and thunder for the native lighting, as one cloud layer between the sky and the scene. The layer's cover closes ahead of
  * the rain (the sky is grey before the rain is heavy), and light passes it by its optical depth: each setting is the transmittance
  * at full cover, so a frame's share is setting^cover, never a straight fade. A thunderhead is a second layer on top, which
- * multiplies. A disc seen through the layer loses more than the light it casts, whose scattered part still arrives: its share is
+ * multiplies, with separate sun/day and moon/night transmission and rain dimming. A disc seen through the layer loses more than the light it casts, whose scattered part still arrives: its share is
  * the square. Haze thickens with the cover and more in a storm, but stays low, as the rain washes it out of the higher air. A
  * lightning strike flashes the sky over the game's own sky flash.
  * Everything here is computed once per frame on the CPU and folded into the lighting packet the shaders already read: the
@@ -15,6 +15,7 @@ package siliconshaders.metal.sun;
 public final class SunWeather {
     public static final int WEATHER=SunTuning.index("weather"),SUN=SunTuning.index("weatherSun"),MOON=SunTuning.index("weatherMoon"),THUNDER=SunTuning.index("weatherThunder"),
         FOG=SunTuning.index("weatherFog"),FLASH=SunTuning.index("weatherFlash"),WATER=SunTuning.index("weatherWater"),
+        NIGHT_DIM=SunTuning.index("weatherNightDim"),THUNDER_MOON=SunTuning.index("weatherThunderMoon"),RAIN_DIM=SunTuning.index("rainDim"),
         WET=SunTuning.index("wetSurfaces"),WET_STRENGTH=SunTuning.index("wetStrength"),WET_PUDDLES=SunTuning.index("wetPuddles"),WET_DRYING=SunTuning.index("wetDrying"),WET_REFLECTION_RADIUS=SunTuning.index("wetReflectionRadius");
     /** The packet slots: p[7].w the sky's thunder darkening, p[18].y the flash (SunTuning lightSpare, moonSpare0). */
     public static final int THUNDER_SLOT=SunTuning.index("lightSpare"),FLASH_SLOT=SunTuning.index("moonSpare0");
@@ -25,8 +26,8 @@ public final class SunWeather {
     static final int[] SKY_LIGHT={SunTuning.index("skyDay"),SunTuning.index("skyDusk"),SunTuning.index("skyNight")};
 
     /**
-     * rain 0..1; cover: the cloud layer, 0..1; darken: the share thunder takes from sky and ambient light (the sun's is in
-     * light); light scales the sun, moonLight the moon; flash 0..2; fog: extra haze density, times the clear one.
+     * rain 0..1; cover: the cloud layer, 0..1; darken: the share thunder takes from sky and ambient light at this time of day;
+     * light scales the sun, moonLight the moon independently; flash 0..2; fog: extra haze density, times the clear one.
      */
     public record Frame(float rain,float cover,float darken,float light,float moonLight,float flash,float fog) {
         public static final Frame CLEAR=new Frame(0,0,0,1,1,0,0);
@@ -44,16 +45,26 @@ public final class SunWeather {
      * (2 on a strike, counted down per tick); partialTick: how far into the tick the frame is.
      */
     public static Frame frame(float rain,float thunder,int flashTicks,float partialTick,float[] tuning) {
+        return frame(rain,thunder,flashTicks,partialTick,1,tuning);
+    }
+    /** sunHeight is the real sun's elevation, independent of whether moon shadows are enabled. */
+    public static Frame frame(float rain,float thunder,int flashTicks,float partialTick,float sunHeight,float[] tuning) {
         if(tuning[WEATHER]<0.5f)return Frame.CLEAR;
         rain=clamp(rain);float storm=clamp(thunder)*rain,cover=cover(rain);
-        float through=through(tuning[THUNDER],storm);
-        float light=through(tuning[SUN],cover)*through,moonLight=through(tuning[MOON],cover)*through;
+        float sunThrough=through(tuning[THUNDER],storm),moonThrough=through(tuning[THUNDER_MOON],storm);
+        float through=sunThrough+(moonThrough-sunThrough)*night(sunHeight);
+        float light=through(tuning[SUN],cover)*sunThrough,moonLight=through(tuning[MOON],cover)*moonThrough;
         // A strike is a sharp peak: square its two ticks' fade.
         float fade=flashTicks>0?clamp((flashTicks-partialTick)/2f):0;
         return new Frame(rain,cover,1-through,light,moonLight,fade*fade*tuning[FLASH],(cover+STORM_HAZE*storm)*tuning[FOG]);
     }
     /** The cloud layer closes ahead of the rain. */
     private static float cover(float rain) { return rain*(2-rain); }
+    /** Matches sun.metal's smooth day/night blend, so dusk never snaps between the two settings. */
+    private static float night(float sunHeight) {
+        float day=clamp(((Float.isFinite(sunHeight)?sunHeight:1)+.10f)/.20f);
+        return 1-day*day*(3-2*day);
+    }
     /** The light a layer of this depth lets through, with through(share,1)=share. */
     private static float through(float share,float depth) { return depth<=0?1:(float)Math.pow(Math.max(0,share),depth); }
     /** How much the weather takes from the water's own color: a share of what the clouds take from the sun. 0 in clear weather. */
@@ -78,9 +89,13 @@ public final class SunWeather {
      * pixel, the same result. Haze: fog extra density, and a part of it as reach; ambient sky light: thunder's darkening.
      */
     public static void pack(float[] tuning,Frame weather) {
+        pack(tuning,weather,1);
+    }
+    public static void pack(float[] tuning,Frame weather,float sunHeight) {
         tuning[THUNDER_SLOT]=weather.darken();tuning[FLASH_SLOT]=weather.flash();
         tuning[FOG_DENSITY]*=1+weather.fog();tuning[FOG_HEIGHT]/=1+HAZE_REACH*weather.fog();
         for(int i:SKY_LIGHT)tuning[i]*=1-weather.darken();
+        if(weather.cover()>0)tuning[RAIN_DIM]+=(tuning[NIGHT_DIM]-tuning[RAIN_DIM])*night(sunHeight);
     }
     /**
      * How wet the world is, after Iris's wetness (Complementary's rain puddles read it): it follows the rain over a 30 s half

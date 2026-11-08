@@ -1979,7 +1979,7 @@ public final class OwnTerrain {
         siliconshaders.metal.sun.SunTuning.get().copyValues(this.nativeSunTuning);
         float[] weatherTuning=this.nativeSunTuning;
         var weather=weatherLevel==null||!overworld?siliconshaders.metal.sun.SunWeather.Frame.CLEAR:siliconshaders.metal.sun.SunWeather.frame(weatherLevel.getRainLevel(partialTick),
-            weatherLevel.getThunderLevel(partialTick),((siliconshaders.metal.mixin.pack.SunSkyFlashAccess)weatherLevel).siliconshaders$skyFlashTime(),partialTick,weatherTuning);
+            weatherLevel.getThunderLevel(partialTick),((siliconshaders.metal.mixin.pack.SunSkyFlashAccess)weatherLevel).siliconshaders$skyFlashTime(),partialTick,sy,weatherTuning);
         float strength=Math.max(0,Math.min(1,(sy-0.03f)/0.15f))*weather.light();
         // Moon shadows: below the horizon the moon (opposite the sun) is the directional light, with the same
         // horizon ramp, scaled by the moonlight intensity, moon phase and rain.
@@ -2014,7 +2014,7 @@ public final class OwnTerrain {
             var look=siliconshaders.metal.sun.SunLook.get().values();OwnNative.sunLook(this.own,look.exposure(),look.saturation(),look.contrast());
             float[] tuning=this.nativeSunLightingTuning;System.arraycopy(weatherTuning,0,tuning,0,tuning.length);
             this.materialActiveGroups=ReflectionReceivers.activeGroups(tuning);
-            siliconshaders.metal.sun.SunWeather.pack(tuning,weather);
+            siliconshaders.metal.sun.SunWeather.pack(tuning,weather,sy);
             // Wet surfaces: wetness builds up in rain over half a minute and dries afterwards, only in rainy biomes.
             var wetLevel=Minecraft.getInstance().level;boolean rainyBiome=false,coldBiome=false;
             if(wetLevel!=null) {

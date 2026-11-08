@@ -17,6 +17,7 @@ import static siliconshaders.metal.settings.MenuWidgets.*;
  * saves, leaving with changes asks first.
  */
 public final class GraphicsScreen extends Screen {
+    private static final java.net.URI SUPPORT_URL=java.net.URI.create("https://ko-fi.com/kela12");
     private enum Page { MAIN, MANAGE, NAME, SHARE, IMPORT, COLOR, NUMBER, CONFIRM, BENCHMARK }
     private static final String[] LEVELS={"standard","low","medium","high","ultra"};
     /** Stands in for a label's %s: the text before it names the setting, the text after it is the value's unit. */
@@ -37,15 +38,7 @@ public final class GraphicsScreen extends Screen {
     private static Component text(String key,Object... args){return Component.translatable("siliconshaders.menu."+key,args);}
     private Component featureTitle(String id){return text("feature."+id);}
     private List<GraphicsProfile> presets(){
-        Map<String,Float> natural=GraphicsCatalog.defaults();natural.put("shadow.enabled",1f);
-        GraphicsProfile standard=DefaultProfile.get(text("preset.standard").getString()); // SiliconShaders' standard profile (resources/siliconshaders/default-profile.txt)
-        Map<String,Float> soft=new LinkedHashMap<>(natural);soft.put("look.saturation",.95f);soft.put("look.contrast",.95f);soft.put("camera.bloom",1f);soft.put("camera.bloomStrength",.12f);
-        Map<String,Float> cinema=new LinkedHashMap<>(natural);cinema.put("look.saturation",.9f);cinema.put("look.contrast",1.1f);cinema.put("camera.bloom",1f);cinema.put("camera.bloomStrength",.2f);cinema.put("camera.godrays",1f);cinema.put("camera.raysStrength",.35f);
-        return List.of(standard,new GraphicsProfile("builtin.natural",text("preset.natural").getString(),GraphicsProfile.Scope.LOOK,GraphicsCatalog.portable(soft,GraphicsProfile.Scope.LOOK)),new GraphicsProfile("builtin.cinema",text("preset.cinema").getString(),GraphicsProfile.Scope.LOOK,GraphicsCatalog.portable(cinema,GraphicsProfile.Scope.LOOK)),
-            new GraphicsProfile("builtin.maxFps",text("preset.maxFps").getString(),GraphicsProfile.Scope.ALL,GraphicsCatalog.portable(GraphicsCatalog.maxFps(),GraphicsProfile.Scope.ALL)),
-            new GraphicsProfile("builtin.endHole",text("preset.endHole").getString(),GraphicsProfile.Scope.LOOK,GraphicsCatalog.portable(GraphicsCatalog.endHole(),GraphicsProfile.Scope.LOOK)),
-            new GraphicsProfile("builtin.endSaturn",text("preset.endSaturn").getString(),GraphicsProfile.Scope.LOOK,GraphicsCatalog.portable(GraphicsCatalog.endSaturn(),GraphicsProfile.Scope.LOOK)),
-            new GraphicsProfile("builtin.endNebula",text("preset.endNebula").getString(),GraphicsProfile.Scope.LOOK,GraphicsCatalog.portable(GraphicsCatalog.endNebula(),GraphicsProfile.Scope.LOOK)));
+        return BundledProfiles.all(text("preset.standard").getString());
     }
     private GraphicsProfile selected(){GraphicsProfile own=profiles.find(session.selected());if(own!=null)return own;return presets.stream().filter(p->p.id().equals(session.selected())).findFirst().orElse(null);}
 
@@ -64,8 +57,14 @@ public final class GraphicsScreen extends Screen {
             search=addRenderableWidget(new EditBox(font,searchX+5,38,searchW-10,12,text("search")));search.setBordered(false);search.setTextShadow(false);search.setTextColor(TEXT);search.setHint(text("search"));search.setValue(query);search.setMaxLength(80);
             search.setResponder(value->{if(value.equals(query))return;query=value;page=Page.MAIN;rebuild();});
         }
-        undoButton=addRenderableWidget(new Action(12,height-24,70,18,text("undo"),()->{session.undo();rebuild();}));undoButton.setTooltip(Tooltip.create(text("undo.help")));
-        Action see=addRenderableWidget(new Action(86,height-24,70,18,text("preview"),()->{preview=true;comparing=false;}));see.active=minecraft.level!=null;see.setTooltip(Tooltip.create(text("preview.help")));
+        boolean compactFooter=width<438;
+        AbstractWidget support;
+        if(compactFooter){support=new Icon(Component.literal("♥"),text("support"),this::support);support.setRectangle(18,18,12,height-24);}
+        else support=new Action(12,height-24,108,18,text("support"),this::support);
+        addRenderableWidget(support).setTooltip(Tooltip.create(text("support.help")));
+        int undoX=compactFooter?34:126,previewX=compactFooter?96:200,actionWidth=compactFooter?58:70;
+        undoButton=addRenderableWidget(new Action(undoX,height-24,actionWidth,18,text("undo"),()->{session.undo();rebuild();}));undoButton.setTooltip(Tooltip.create(text("undo.help")));
+        Action see=addRenderableWidget(new Action(previewX,height-24,actionWidth,18,text("preview"),()->{preview=true;comparing=false;}));see.active=minecraft.level!=null;see.setTooltip(Tooltip.create(text("preview.help")));
         addRenderableWidget(new Action(width-162,height-24,82,18,text("benchmark"),()->open(Page.BENCHMARK)));
         addRenderableWidget(new Action(width-74,height-24,62,18,text("done"),this::finish,()->false,true));
         rebuild();
@@ -258,6 +257,7 @@ public final class GraphicsScreen extends Screen {
     }
     private String number(GraphicsCatalog.Rule r,float v){
         String key=r.key();
+        if(key.equals("sun.weatherSun")||key.equals("sun.weatherMoon")||key.equals("sun.weatherThunder")||key.equals("sun.weatherThunderMoon")||key.equals("sun.rainDim")||key.equals("sun.weatherNightDim"))return Math.round(v*100)+" %";
         if(key.equals("shadow.size"))return v==0?Component.translatable("options.off").getString():Math.round(v)+" px";
         if(key.equals("shadow.gbufferView"))return Component.translatable("siliconshaders.shaders.sun.gbufferView."+Math.round(v)).getString();
         if(key.endsWith("raysVariant"))return Component.translatable("siliconshaders.camera.raysVariant."+(v>.5f?"optimized":"original")).getString();
@@ -295,7 +295,16 @@ public final class GraphicsScreen extends Screen {
     private void back(){page=Page.MAIN;notice="";warning="";rebuild();}
     private void name(String id){editId=id;open(Page.NAME);}
     private EditBox field(int y,Component hint,int max){EditBox box=body(new EditBox(font,bx+7,y,bw-14,20,hint));box.setBordered(false);box.setTextShadow(false);box.setTextColor(TEXT);box.setHint(hint);box.setMaxLength(max);return box;}
-    private void saveProfile(){GraphicsProfile existing=profiles.find(session.selected());if(existing==null){name("");return;}try{profiles.put(session.snapshot(existing.id(),existing.name(),existing.scope()));notice="saved";}catch(Exception failure){error(failure);}}
+    private String copyName(){GraphicsProfile profile=selected();return text("profile.copyName",profile==null?text("defaultName").getString():profile.name()).getString();}
+    private void saveProfile(){
+        GraphicsProfile existing=profiles.find(session.selected());
+        if(existing==null&&!session.builtIn()){name("");return;}
+        try{
+            if(existing==null)session.saveCopy(profiles,copyName());
+            else session.saveProfile(profiles,session.snapshot(existing.id(),existing.name(),existing.scope()));
+            revealSelected=true;back();notice="saved";
+        }catch(Exception failure){error(failure);}
+    }
     private void manage(){
         controls=body(new ControlList(bx,top+14,bw,bottom-top-30));
         controls.add(new ControlRow(new Action(0,0,bw-12,18,text("newProfile"),()->name("")),text("newProfile.help"),()->true,""));
@@ -310,7 +319,8 @@ public final class GraphicsScreen extends Screen {
         body(new Action(bx,top+44,bw,20,text(existing==null?"create":"rename"),()->{
             try{
                 String id=existing==null?UUID.randomUUID().toString():existing.id();GraphicsProfile p=existing==null?session.snapshot(id,nameField.getValue(),GraphicsProfile.Scope.ALL):existing.renamed(nameField.getValue());
-                profiles.put(p);if(existing==null)session.select(id);back();notice="saved";
+                if(existing==null){session.saveProfile(profiles,p);revealSelected=true;}else profiles.put(p);
+                back();notice="saved";
             }catch(Exception failure){error(failure);}
         },()->false,true));
         if(existing!=null){
@@ -388,10 +398,15 @@ public final class GraphicsScreen extends Screen {
         controls.add(new ControlRow(new Action(0,0,bw-12,18,text("benchmark.folder"),()->{try{java.nio.file.Path folder=runtime.directory().resolve("siliconshaders-benchmarks");java.nio.file.Files.createDirectories(folder);new ProcessBuilder("open",folder.toString()).start();}catch(Exception failure){error(failure);}}),Component.empty(),()->true,""));
     }
     private void startBenchmark(String profile){
-        try{session.finish(profiles);closed=true;siliconshaders.metal.bench.ShaderBench.start(profile);}catch(Exception failure){error(failure);}
+        try{session.finish(profiles,copyName());closed=true;siliconshaders.metal.bench.ShaderBench.start(profile);}catch(Exception failure){error(failure);}
     }
-    private void finishAndClose(){try{session.finish(profiles);closed=true;minecraft.gui.setScreen(parent);}catch(Exception failure){back();error(failure);}}
+    private void finishAndClose(){try{session.finish(profiles,copyName());closed=true;minecraft.gui.setScreen(parent);}catch(Exception failure){back();error(failure);}}
     private void finish(){if(page!=Page.MAIN){back();return;}finishAndClose();}
+    private void support(){
+        // Open from this settings button only. Keeping this Screen avoids abandoning the live settings draft in removed().
+        try{com.mojang.blaze3d.Blaze3D.openUri(SUPPORT_URL);}
+        catch(RuntimeException failure){notice="support.failed";siliconshaders.metal.Log.warn("[SiliconShaders] Could not open Ko-fi: "+failure.getMessage());}
+    }
     private void error(Exception failure){String key=failure.getMessage();notice=key!=null&&(key.startsWith("profile.")||key.startsWith("code.")||key.startsWith("profiles."))?key:"saveFailed";}
     private String hex(){return String.format(Locale.ROOT,"#%02X%02X%02X",Math.round(session.value(colorBase+"R")*255),Math.round(session.value(colorBase+"G")*255),Math.round(session.value(colorBase+"B")*255));}
 
@@ -441,7 +456,7 @@ public final class GraphicsScreen extends Screen {
         };
         g.text(font,fit(heading,bw),bx,top,TEXT,false);
         GraphicsProfile selected=selected();String name=(selected==null?text("current").getString():selected.name())+(selected!=null&&!session.matches(selected)?" *":"");
-        if(width>370)g.text(font,fit(text("active",name).getString(),Math.max(0,width-340)),162,height-19,MUTED,false);
+        if(width>484)g.text(font,fit(text("active",name).getString(),width-454),276,height-19,MUTED,false);
         if(page==Page.MAIN&&!editing){
             List<GraphicsProfile> packs=new ArrayList<>(presets);packs.addAll(profiles.profiles());
             int q=top+12+packRows(packs.size())*36+18;
@@ -463,7 +478,7 @@ public final class GraphicsScreen extends Screen {
         // The description of the hovered setting, in one place instead of under every row.
         boolean warn=notice.isEmpty()&&info.isEmpty()&&page==Page.MAIN&&!warning.isEmpty();
         String line=!notice.isEmpty()?text(notice).getString():warn?warning:info;
-        boolean failed=!notice.isEmpty()&&(notice.equals("saveFailed")||notice.startsWith("code.")&&!notice.equals("code.ready"));
+        boolean failed=!notice.isEmpty()&&(notice.equals("saveFailed")||notice.equals("support.failed")||notice.startsWith("code.")&&!notice.equals("code.ready"));
         if(!line.isEmpty())g.text(font,fit(line,bw),bx,bottom-10,failed?ERROR:warn?WARNING:MUTED,false);
     }
 

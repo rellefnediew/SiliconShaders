@@ -16,8 +16,8 @@ public final class SunWeatherChecks {
                 var param=SunTuning.PARAMS.get(slot);
                 require(slot>=0&&slot<SunTuning.LIGHTING_COUNT&&param.min()==0&&param.max()==0&&t[slot]==0,"Weather slot "+slot+" is not a free packet spare");
             }
-            for(int i:new int[]{SunWeather.WEATHER,SunWeather.SUN,SunWeather.MOON,SunWeather.THUNDER,SunWeather.FOG,SunWeather.FLASH})
-                require(i>=0&&SunTuning.PARAMS.get(i).group()==SunTuning.Group.SKY&&i<SunTuning.MATERIAL_START,"Weather setting missing or misplaced: "+i);
+            for(int i:new int[]{SunWeather.WEATHER,SunWeather.SUN,SunWeather.MOON,SunWeather.THUNDER,SunWeather.FOG,SunWeather.FLASH,SunWeather.NIGHT_DIM,SunWeather.THUNDER_MOON})
+                require(i>=SunTuning.LIGHTING_COUNT&&i<SunTuning.COUNT&&SunTuning.PARAMS.get(i).group()==SunTuning.Group.SKY,"Weather setting missing or misplaced: "+i);
             require(SunTuning.LIGHTING_COUNT==76&&SunTuning.WATER_START==76&&SunTuning.MATERIAL_COUNT==25&&SunTuning.index("materialReflections")==SunTuning.MATERIAL_START+14,
                 "Packet layout moved");
 
@@ -37,7 +37,8 @@ public final class SunWeatherChecks {
             require(SunWeather.celestial(0,(float)Math.PI,false,.38f,.55f)==0,"Weather off changed the sky");
             // Thunder: darker, only while it rains; a strike flashes and fades over its two ticks.
             var storm=SunWeather.frame(1,1,0,0,t);
-            require(near(storm.darken(),.4f)&&near(storm.light(),.38f*.6f)&&near(storm.moonLight(),.55f*.6f)&&near(storm.fog(),.75f*1.4f),"Thunderstorm: "+storm);
+            require(near(storm.darken(),.4f)&&near(storm.light(),.38f*.6f)&&near(storm.moonLight(),.55f*.8f)&&near(storm.fog(),.75f*1.4f),"Thunderstorm: "+storm);
+            separateNightWeather(t);
             require(SunWeather.frame(0,1,0,0,t).darken()==0,"Thunder without rain darkens");
             // Water: unchanged when clear, greyer in rain, darker in a storm, never black.
             require(SunWeather.waterDim(rain,0)==0&&near(SunWeather.waterDim(rain,1),SunWeather.waterDim(rain))&&near(SunWeather.waterDim(rain,2),2*.55f*.62f)&&SunWeather.waterDim(storm,3)==1&&t[SunWeather.WATER]==1,"Water strength setting");
@@ -84,7 +85,41 @@ public final class SunWeatherChecks {
             require(new SunTuning(dir).value(SunWeather.THUNDER_SLOT)==0,"Per-frame weather leaked into the settings");
             settings.reset(SunTuning.Group.SKY);
             require(settings.value(SunWeather.SUN)==.38f&&settings.value(SunWeather.WEATHER)==1,"Sky reset skips weather");
+            settings.set(SunWeather.NIGHT_DIM,.15f);settings.set(SunWeather.THUNDER_MOON,.9f);
+            float[] nightLoaded=new SunTuning(dir).values();
+            require(near(nightLoaded[SunWeather.NIGHT_DIM],.15f)&&near(nightLoaded[SunWeather.THUNDER_MOON],.9f),"Night weather settings did not persist");
+            settings.reset(SunTuning.Group.SKY);
+            require(near(settings.value(SunWeather.NIGHT_DIM),.25f)&&near(settings.value(SunWeather.THUNDER_MOON),.8f),"Night weather reset defaults");
             System.out.printf("PASS: clear = before, full rain sun %.2f (was 0), storm %.3f, flash fade, spare slots, settings and reset%n",rain.light(),storm.light());
         } finally { try(var files=Files.walk(dir)){for(var p:files.sorted(java.util.Comparator.reverseOrder()).toList())Files.delete(p);} }
+    }
+
+    private static void separateNightWeather(float[] defaults){
+        float[] t=defaults.clone();t[SunWeather.THUNDER]=0;t[SunWeather.THUNDER_MOON]=1;
+        SunWeather.Frame day=SunWeather.frame(1,1,0,0,1,t),night=SunWeather.frame(1,1,0,0,-1,t);
+        require(day.light()==0&&near(night.moonLight(),t[SunWeather.MOON])&&day.darken()==1&&night.darken()==0,"Day thunder must not darken the moon or night sky");
+        t[SunWeather.THUNDER]=1;t[SunWeather.THUNDER_MOON]=0;
+        day=SunWeather.frame(1,1,0,0,1,t);night=SunWeather.frame(1,1,0,0,-1,t);
+        require(near(day.light(),t[SunWeather.SUN])&&night.moonLight()==0&&day.darken()==0&&night.darken()==1,"Night thunder must not darken the sun or day sky");
+        t=defaults.clone();t[SunWeather.RAIN_DIM]=1;t[SunWeather.NIGHT_DIM]=.25f;
+        t[SunTuning.MOON_SHADOWS]=0; // Night ambient controls also work without direct moon lighting.
+        day=SunWeather.frame(1,1,0,0,1,t);night=SunWeather.frame(1,1,0,0,-1,t);
+        float[] dayPacket=t.clone(),nightPacket=t.clone();
+        SunWeather.pack(dayPacket,day,1);SunWeather.pack(nightPacket,night,-1);
+        require(dayPacket[SunWeather.RAIN_DIM]==1&&near(nightPacket[SunWeather.RAIN_DIM],.25f),"Separate day/night rain dimming not packed");
+        require(near(night.darken(),.2f),"Night thunder defaults should retain 80% light");
+        for(int i:SunWeather.SKY_LIGHT)require(near(dayPacket[i],t[i]*.6f)&&near(nightPacket[i],t[i]*.8f),"Day/night sky light not separated");
+        // Smooth transitions at sunset: both sky weather controls meet continuously at the horizon.
+        float previous=-1;
+        for(int step=0;step<=200;step++){
+            float elevation=-.1f+step*.001f;var frame=SunWeather.frame(1,1,0,0,elevation,t);float[] packet=t.clone();SunWeather.pack(packet,frame,elevation);
+            require(packet[SunWeather.RAIN_DIM]>=previous&&Math.abs(frame.darken()-(.2f+.2f*(packet[SunWeather.RAIN_DIM]-.25f)/.75f))<1e-5,"Dusk weather blends disagree");
+            if(previous>=0)require(packet[SunWeather.RAIN_DIM]-previous<.01f,"Abrupt day/night weather transition");previous=packet[SunWeather.RAIN_DIM];
+        }
+        float[] clear=t.clone();SunWeather.pack(clear,SunWeather.frame(0,1,0,0,-1,t),-1);
+        require(java.util.Arrays.equals(clear,t),"Clear night changed the lighting packet");
+        t[SunWeather.WEATHER]=0;float[] off=t.clone();SunWeather.pack(off,SunWeather.frame(1,1,0,0,-1,t),-1);
+        require(java.util.Arrays.equals(off,t),"Disabled night weather changed the packet");
+        System.out.println("PASS: independent sun/moon thunder, separate night rain dimming, night ambient without moon shadows, smooth dusk, clear/off unchanged");
     }
 }

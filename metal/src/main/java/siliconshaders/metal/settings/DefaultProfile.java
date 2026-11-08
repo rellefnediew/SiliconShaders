@@ -22,6 +22,12 @@ public final class DefaultProfile {
 
     /** The standard profile under the given display name, with only the settings this version knows, fitted to their ranges. */
     public static GraphicsProfile get(String name) {
+        GraphicsProfile profile=source();
+        return new GraphicsProfile(ID,name,profile.scope(),GraphicsCatalog.portable(profile.values(),profile.scope()));
+    }
+
+    /** Read without the catalog: its quality table also takes its Standard values from this code during initialization. */
+    static GraphicsProfile source() {
         GraphicsProfile profile=decoded;
         if(profile==null) {
             try(InputStream in=DefaultProfile.class.getResourceAsStream("/siliconshaders/default-profile.txt")) {
@@ -30,7 +36,7 @@ public final class DefaultProfile {
             } catch(java.io.IOException failure) { throw new IllegalStateException(failure); }
             decoded=profile;
         }
-        return new GraphicsProfile(ID,name,profile.scope(),GraphicsCatalog.portable(profile.values(),profile.scope()));
+        return profile;
     }
 
     /** True when this game directory has no SiliconShaders settings yet (after importing MCOpt's). */

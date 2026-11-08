@@ -93,12 +93,22 @@ If you used MCOpt before, replace its JAR. Do not keep both.
 - **Sky:** sky and fog, auroras, a night nebula, rainbows, visible sun and moon
 - **Nether and End:** their own lighting, haze and fog. The End has a procedural sky with stars, a black hole and a
   ringed planet.
-- **Camera:** light rays, bloom, depth of field, motion blur, lens flares, chromatic aberration, vignette, sharpening
+- **Camera:** light rays, bloom, depth of field, motion blur, lens flares, chromatic aberration, vignette, sharpening,
+  film grain
 - **Performance:** MetalFX upscaling, quality settings tuned for each Apple Silicon generation, Smart Leaves
-- **Profiles:** save your own profiles, and share them as a code that others can import
+- **Profiles:** two built-in profiles, **Standard** (a new installation starts with it) and **Noir**; quality levels
+  from Low to Ultra; save your own profiles and share them as a code that others can import
 - A key to switch the shader on and off (set it under Controls → SiliconShaders)
 
 The menu is available in English and German.
+
+### Recommended settings
+
+The Standard profile is tuned for a 1920-pixel-wide picture (1920×1080 or 1920×1200) in exclusive fullscreen,
+anisotropic 8x texture filtering, 4 mipmap levels and improved transparency off. If your Minecraft settings differ,
+a notice on the main menu shows what differs, with Apply, Later and Don't show again. On screens without a Full HD
+mode it recommends a MetalFX render resolution instead; SiliconShaders never switches MetalFX on by itself.
+Clouds are always switched off, because the shader draws its own sky.
 
 ### Benchmark
 
@@ -131,7 +141,7 @@ the link into the report.
 ## Files
 
 Settings are stored in `config/siliconshaders*`. Caches and benchmark results go into `siliconshaders-*` folders in
-the game directory. SiliconShaders makes no network connections.
+the game directory. SiliconShaders makes no network connections; the Support button only opens Ko-fi in your browser.
 
 ### Coming from MCOpt
 
@@ -139,6 +149,11 @@ On first start, old `config/mcopt*.json` settings, profile libraries and `mcopt.
 `config/siliconshaders*`. The original files stay where they are. Existing SiliconShaders settings take priority.
 Old `-Dmcopt.*` JVM options are still accepted; explicit `-Dsiliconshaders.*` options take priority.
 Old `MCOPT1:` profile codes can still be imported. New exports start with `SILICONSHADERS1:`.
+
+## Support
+
+If you like SiliconShaders, you can support its development on [Ko-fi](https://ko-fi.com/kela12).
+The graphics menu has the same link.
 
 ## Building from source
 

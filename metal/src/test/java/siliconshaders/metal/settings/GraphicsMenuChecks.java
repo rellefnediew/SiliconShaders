@@ -93,6 +93,12 @@ public final class GraphicsMenuChecks {
             try(var in=GraphicsMenuChecks.class.getResourceAsStream("/assets/siliconshaders/lang/en_us.json")){require(in!=null,"Menu translations not packaged");var english=com.google.gson.JsonParser.parseReader(new InputStreamReader(in)).getAsJsonObject();try(var de=GraphicsMenuChecks.class.getResourceAsStream("/assets/siliconshaders/lang/de_de.json")){var german=com.google.gson.JsonParser.parseReader(new InputStreamReader(de)).getAsJsonObject();for(String key:english.keySet())if(key.startsWith("siliconshaders.menu."))require(german.has(key),"Missing German menu label: "+key);}}
             // Menu structure: what a player sees must stay whole and reachable.
             var rules=GraphicsCatalog.RULES;
+            for(String key:List.of("weatherSun","rainDim","weatherThunder","weatherMoon","weatherNightDim","weatherThunderMoon")){
+                var rule=rules.get("sun."+key);
+                String group=List.of("weatherSun","rainDim","weatherThunder").contains(key)?"weatherDay":"weatherNight";
+                require(rule!=null&&rule.group().equals(group)&&GraphicsCatalog.feature(rule).equals("weather"),"Day/night weather setting misplaced: "+key);
+                require(GraphicsCatalog.tier(rule)==GraphicsCatalog.Tier.LOOK&&GraphicsCatalog.requires(rule.key()).contains("sun.weather"),"Weather control hidden under More or active when weather is off: "+key);
+            }
             var ring=rules.get("sun.endRingTransparency");
             require(ring!=null&&!ring.toggle()&&ring.min()==0&&ring.max()==1&&Math.abs(ring.step()-.01f)<1e-6,"Ring transparency is not a 0–100% slider");
             require(ring.group().equals("endSky")&&GraphicsCatalog.feature(ring).equals("endSky")&&GraphicsCatalog.tier(ring)==GraphicsCatalog.Tier.LOOK,"Ring transparency is not in the basic End sky section");
@@ -111,8 +117,7 @@ public final class GraphicsMenuChecks {
             require(GraphicsCatalog.feature(rules.get("sun.waterSteps")).equals("water")&&GraphicsCatalog.feature(rules.get("sun.materialWorldReflectionSteps")).equals("materials"),"Merged step counts left their feature");
             for(String key:List.of("sun.endLightElevation","sun.endLightStrength","sun.endHoleSize","sun.endDiscBrightness","sun.endStars"))require(rules.get(key).group().equals("endSky")&&GraphicsCatalog.tier(rules.get(key))==GraphicsCatalog.Tier.LOOK,"End setting placement: "+key);
             require(GraphicsCatalog.requires("sun.endHoleSize").contains("sun.endBlackHole")&&!GraphicsCatalog.requires("sun.endStars").contains("sun.endBlackHole"),"End setting dependencies");
-            // The levels' render scale: lower levels trade sharpness for the largest gain, the top ones stay at full resolution.
-            require(GraphicsCatalog.QUALITY_LEVELS.get(1).get("sun.renderScale")==2&&GraphicsCatalog.QUALITY_LEVELS.get(2).get("sun.renderScale")==1&&GraphicsCatalog.QUALITY_LEVELS.get(3).get("sun.renderScale")==0&&GraphicsCatalog.QUALITY_LEVELS.get(4).get("sun.renderScale")==0&&GraphicsCatalog.QUALITY_LEVELS.get(0).get("sun.renderScale")==0,"Quality levels' render scale");
+            for(var level:GraphicsCatalog.QUALITY_LEVELS)require(!level.containsKey("sun.renderScale"),"Quality level changed the player's MetalFX choice");
             // A short first view: the fog's switch, strength, colour and height; its details under More.
             for(String key:List.of("sun.endFogStrength","sun.endFogColorR","sun.endFogHeight"))require(rules.get(key).group().equals("endSky")&&GraphicsCatalog.tier(rules.get(key))==GraphicsCatalog.Tier.LOOK&&rules.get(key).shareable(),"End fog first view: "+key);
             for(String key:List.of("sun.endFogDistance","sun.endFogBrightness","sun.endFogThickness","sun.endFogSize","sun.endFogWisps","sun.endFogSpeed","sun.endFogEmber","sun.endFogEmberColorR","sun.endFogHoleLight"))require(rules.get(key).group().equals("endSky")&&GraphicsCatalog.tier(rules.get(key))==GraphicsCatalog.Tier.MORE&&rules.get(key).shareable(),"End fog detail not under More: "+key);
@@ -127,14 +132,6 @@ public final class GraphicsMenuChecks {
             require(perFeature==rules.size(),"Settings lost or doubled across features: "+perFeature+" of "+rules.size());
             require(GraphicsCatalog.feature(rules.get("sun.dropWidth")).equals("rain")&&GraphicsCatalog.feature(rules.get("sun.wetPuddles")).equals("wetness")&&GraphicsCatalog.feature(rules.get("sun.weatherSun")).equals("weather"),"Weather split");
             require(GraphicsCatalog.requires("sun.weatherDrops").contains("sun.weather")&&GraphicsCatalog.requires("sun.wetSurfaces").contains("sun.weather")&&GraphicsCatalog.requires("sun.dropWidth").contains("sun.weatherDrops"),"Weather split dependencies");
-            // Ready-made skies touch only the End; the performance pack is a whole, valid profile.
-            for(var pack:List.of(GraphicsCatalog.endHole(),GraphicsCatalog.endSaturn(),GraphicsCatalog.endNebula())){
-                for(String key:pack.keySet())require(key.startsWith("sun.end"),"End pack touches "+key);
-                var merged=GraphicsCatalog.merge(GraphicsCatalog.defaults(),new GraphicsProfile("t","t",GraphicsProfile.Scope.LOOK,GraphicsCatalog.portable(pack,GraphicsProfile.Scope.LOOK)));
-                require(merged.get("look.exposure").equals(GraphicsCatalog.defaults().get("look.exposure")),"End pack changed the picture");
-            }
-            require(GraphicsCatalog.endHole().get("sun.endPlanet")==0&&GraphicsCatalog.endHole().get("sun.endFog")==0&&GraphicsCatalog.endSaturn().get("sun.endPlanet")==1&&GraphicsCatalog.endNebula().get("sun.endBlackHole")==0&&GraphicsCatalog.endNebula().get("sun.endFog")==1,"End pack contents");
-            var fast=GraphicsCatalog.maxFps();GraphicsCatalog.validate(fast);require(fast.get("sun.renderScale")==2&&fast.get("sun.ssao")==0&&fast.get("camera.enabled")==0&&fast.get("shadow.enabled")==1,"Performance pack");
             require(GraphicsCatalog.requires("sun.endFogHeight").contains("sun.endFog")&&GraphicsCatalog.requires("sun.endFogEmberColorG").contains("sun.endFogEmber")&&GraphicsCatalog.requires("sun.endFogHoleLight").contains("sun.endBlackHole"),"End fog look active without what it needs");
             for(String key:List.of("sun.endFog","sun.endFogStrength")){
                 var rule=rules.get(key);
@@ -161,8 +158,24 @@ public final class GraphicsMenuChecks {
             require(!GraphicsCatalog.requires("sun.moonGlare").contains("sun.celestialStyle")&&GraphicsCatalog.requires("sun.moonGlare").contains("sun.skyEnabled")&&GraphicsCatalog.requires("sun.moonLight").contains("sun.moonShadows")&&GraphicsCatalog.requires("sun.rainbowStrength").contains("sun.rainbows"),"Dependencies changed");
             var order=new ArrayList<>(rules.keySet());require(order.indexOf("sun.sunGlare")==order.indexOf("sun.celestialSunGlow")+1&&order.indexOf("sun.moonGlare")==order.indexOf("sun.celestialMoonGlow")+1,"The two glows are not side by side");
             require(GraphicsCatalog.QUALITY_LEVELS.size()==5,"Quality levels changed");
-            Map<String,Float> fresh=new GraphicsSettings(Files.createDirectories(directory.resolve("fresh"))).capture();
+            Path freshDir=Files.createDirectories(directory.resolve("fresh"));DefaultProfile.applyOnFirstStart(freshDir);
+            GraphicsSettings freshSettings=new GraphicsSettings(freshDir);Map<String,Float> fresh=freshSettings.capture();
             for(var e:GraphicsCatalog.QUALITY_LEVELS.get(0).entrySet())require(Math.abs(fresh.get(e.getKey())-e.getValue())<1e-4f,"A fresh install is not on Standard: "+e.getKey());
+            MenuSession qualityMenu=new MenuSession(freshSettings,DefaultProfile.ID);
+            qualityMenu.setAll(GraphicsCatalog.QUALITY_LEVELS.get(1));qualityMenu.setAll(GraphicsCatalog.QUALITY_LEVELS.get(0));
+            require(qualityMenu.values().equals(fresh),"Low then Standard must restore the shipped profile's quality without changing its look");
+            qualityMenu.set("sun.renderScale",1);
+            for(int index=0;index<GraphicsCatalog.QUALITY_LEVELS.size();index++){
+                qualityMenu.setAll(GraphicsCatalog.QUALITY_LEVELS.get(4));
+                require(qualityMenu.value("sun.coloredLight")==1,"Ultra must enable colored block light");
+                qualityMenu.setAll(GraphicsCatalog.QUALITY_LEVELS.get(1));
+                require(qualityMenu.value("sun.waterReflection")==0,"Low must disable water reflections");
+                qualityMenu.setAll(GraphicsCatalog.QUALITY_LEVELS.get(index));
+                require(qualityMenu.value("sun.ssao")==0,"SSAO enabled by quality level "+index);
+                require(qualityMenu.value("sun.coloredLight")== (index==4?1:0),"Colored light leaked from Ultra into level "+index);
+                require(Math.abs(qualityMenu.value("sun.waterReflection")-(index==1?0:fresh.get("sun.waterReflection")))<1e-4f,"Water reflections not restored after Low: "+index);
+                require(qualityMenu.value("sun.renderScale")==1,"Quality switch changed MetalFX");
+            }
             for(var level:GraphicsCatalog.QUALITY_LEVELS){require(level.keySet().equals(GraphicsCatalog.QUALITY_LEVELS.get(0).keySet()),"Levels set different settings");for(var e:level.entrySet())rules.get(e.getKey()).normalize(e.getValue());}
             require(GraphicsCatalog.QUALITY_LEVELS.get(4).containsKey("sun.ssaoQuality"),"SSAO left out of the quality levels");
             for(String lang:List.of("en_us","de_de"))try(var in=GraphicsMenuChecks.class.getResourceAsStream("/assets/siliconshaders/lang/"+lang+".json")){
@@ -177,8 +190,58 @@ public final class GraphicsMenuChecks {
                 for(String level:List.of("standard","low","medium","high","ultra"))require(json.has("siliconshaders.menu.quality."+level)&&json.has("siliconshaders.menu.quality."+level+".help"),"Missing "+lang+" level: "+level);
                 require(!json.get("siliconshaders.menu.color.camera_vignette").getAsString().matches("Rot|Red"),"Vignette colour named after one channel");
             }
+            protectedProfiles(directory.resolve("protected"));
             System.out.println("PASS: exact portable-code round trips, checksum/version/size/type limits, bounded JSON, look-only performance preservation, frozen old code, settings newer than a code left alone, out-of-range values fitted, future keys skipped, invalid-import isolation, saved/renamed/deleted profiles, live preview without disk writes, all-store commit, undo/cancel, atomic rollback, corrupt-library preservation, bilingual menu labels");
             System.out.println("Portable ALL code: "+encoded.length()+" characters for "+all.values().size()+" settings");
         }finally{try(var paths=Files.walk(directory)){for(Path path:paths.sorted(Comparator.reverseOrder()).toList())Files.deleteIfExists(path);}}
+    }
+
+    private static void protectedProfiles(Path directory)throws Exception{
+        DefaultProfile.applyOnFirstStart(directory);
+        GraphicsSettings settings=new GraphicsSettings(directory);ProfileStore store=new ProfileStore(directory);
+        GraphicsProfile standard=DefaultProfile.get("Standard");Map<String,Float> original=standard.values();
+        MenuSession unchanged=new MenuSession(settings,DefaultProfile.ID);unchanged.finish(store);
+        require(store.profiles().isEmpty()&&store.active().equals(DefaultProfile.ID),"Unchanged Standard created a personal profile");
+
+        MenuSession edited=new MenuSession(settings,DefaultProfile.ID);
+        float exposure=edited.value("look.exposure")==2f?.5f:2f;edited.set("look.exposure",exposure);
+        edited.finish(store,"Standard (Kopie)");
+        GraphicsProfile first=store.find(edited.selected());
+        require(first!=null&&!edited.builtIn()&&first.name().equals("Standard (Kopie)")&&first.values().get("look.exposure")==exposure,"Edited Standard was not copied and selected");
+        ProfileStore loaded=new ProfileStore(directory);
+        require(loaded.active().equals(first.id())&&loaded.find(first.id()).values().equals(first.values()),"New profile or active selection lost on reload");
+        MenuSession reopened=new MenuSession(new GraphicsSettings(directory),loaded.active());
+        require(reopened.matches(loaded.find(loaded.active())),"Saved personal copy no longer matches its settings");
+        reopened.finish(loaded);require(loaded.profiles().size()==1,"Finishing a personal profile made another copy");
+
+        MenuSession second=new MenuSession(settings,DefaultProfile.ID);second.replace(standard);second.set("look.exposure",exposure);
+        second.finish(store,"Standard (Kopie)");
+        require(store.profiles().size()==2&&store.find(second.selected()).name().equals("Standard (Kopie) (2)")&&store.find(first.id()).values().equals(first.values()),"Copy name collision overwrote an existing profile");
+        require(DefaultProfile.get("Standard").values().equals(original),"Bundled Standard profile was changed");
+
+        Path library=directory.resolve("config/siliconshaders-graphics-profiles.json");byte[] before=Files.readAllBytes(library);
+        Map<String,Float> saved=settings.capture();
+        MenuSession cancel=new MenuSession(settings,store.active());cancel.replace(standard);cancel.set("look.exposure",exposure);cancel.abandon();
+        require(Arrays.equals(before,Files.readAllBytes(library))&&settings.capture().equals(saved)&&store.profiles().size()==2,"Cancel saved or selected a copy");
+        rejects(()->{try{store.put(standard);}catch(IOException e){throw new UncheckedIOException(e);}},"Built-in profile accepted by personal profile store");
+        rejects(()->{try{store.delete(DefaultProfile.ID);}catch(IOException e){throw new UncheckedIOException(e);}},"Built-in profile allowed to be deleted");
+
+        MenuSession saveOpen=new MenuSession(settings,store.active());saveOpen.replace(standard);saveOpen.set("look.exposure",exposure);saveOpen.saveCopy(store,"Standard (Kopie)");
+        String active=saveOpen.selected();Map<String,Float> checkpoint=Map.copyOf(saveOpen.values());
+        require(new ProfileStore(directory).active().equals(active)&&!saveOpen.changed(),"Saving in the open menu did not activate the copy or reset the dirty state");
+        saveOpen.set("look.exposure",exposure==2f?.5f:2f);saveOpen.abandon();
+        require(settings.capture().equals(checkpoint)&&store.active().equals(active),"Cancel after saving reverted past the saved profile");
+
+        // A failed settings transaction must publish neither the new copy nor its active ID. Retrying creates one copy.
+        MenuSession failing=new MenuSession(settings,DefaultProfile.ID);failing.replace(standard);failing.set("look.exposure",exposure);
+        int count=store.profiles().size();before=Files.readAllBytes(library);
+        Path camera=directory.resolve("config/siliconshaders-camera.json"),backup=camera.resolveSibling("camera.saved");
+        Files.move(camera,backup);Files.createDirectory(camera);boolean failed=false;
+        try{failing.finish(store,"Standard (Kopie)");}catch(IOException expected){failed=true;}
+        finally{Files.delete(camera);Files.move(backup,camera);}
+        require(failed&&failing.selected().equals(DefaultProfile.ID)&&store.active().equals(active)&&store.profiles().size()==count&&Arrays.equals(before,Files.readAllBytes(library)),"Failed copy save changed profile selection or library");
+        failing.finish(store,"Standard (Kopie)");
+        require(store.profiles().size()==count+1&&store.active().equals(failing.selected()),"Retry failed to create and activate exactly one copy");
+        System.out.println("PASS: protected Standard, automatic personal copy and activation, unchanged/cancel no copy, unique names, saved cancel baseline, transactional failure and retry");
     }
 }

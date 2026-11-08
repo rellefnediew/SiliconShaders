@@ -151,7 +151,9 @@ public final class SunTuning {
         // Underwater fog and caustics at half size (WaterFrame quality.w); off is the original full-size pass.
         p("underwaterHalf",Group.WATER,1,0,1,1),
         // The End's stars in the Overworld's clear night (SunAtmosphere); 0 brings vanilla's stars back.
-        p("nightStars",Group.SKY,1,0,3,0.05f));
+        p("nightStars",Group.SKY,1,0,3,0.05f),
+        // Separate night weather controls, folded on the CPU into the existing lighting packet. Append to keep all offsets stable.
+        p("weatherNightDim",Group.SKY,0.25f,0,1,0.05f),p("weatherThunderMoon",Group.SKY,0.80f,0,1,0.05f));
     public static final int COUNT=PARAMS.size(),LIGHTING_COUNT=76,WATER_START=76;
     public static final int MATERIAL_START=index("materials"),MATERIAL_COUNT=25;
     public static final int WATER_REFLECTION_QUALITY=index("waterReflectionQuality"),UNDERWATER_QUALITY=index("underwaterQuality"),UNDERWATER_HALF=index("underwaterHalf"),

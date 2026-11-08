@@ -17,11 +17,12 @@ public final class GraphicsCatalog {
     /** A color's channels stay together: naming the red channel takes green and blue along. */
     private static boolean basic(String key){
         if(BASIC.contains(key))return true;
+        if(Set.of("weatherSun","weatherMoon","weatherThunder","weatherThunderMoon","rainDim","weatherNightDim").contains(key))return true;
         return (key.endsWith("G")||key.endsWith("B"))&&BASIC.contains(key.substring(0,key.length()-1)+"R");
     }
     /** Headings inside a feature, in display order. */
     public static final List<String> GROUP_ORDER=List.of("picture","sun","skyLight","moon","moonPhases","misc","shadows","blockLight","coloredLight","hand","ssao",
-        "skyDay","skyGlow","skyNight","fog","nebula","celestialSun","celestialMoon","moonDisplay","celestial","aurora","rainbow","endSky","weather","drops","wet","waterWaves","waterOptics","waterEffects",
+        "skyDay","skyGlow","skyNight","fog","nebula","celestialSun","celestialMoon","moonDisplay","celestial","aurora","rainbow","endSky","weatherDay","weatherNight","weather","drops","wet","waterWaves","waterOptics","waterEffects",
         "materials","materialGroups","transparent","reflections","general","bloom","godrays","dof","motion","flare","chroma","vignette","sharpen","grain","render","diagnostics");
     private static String sunGroup(String k){
         // The sky's glow around a body sits beside the body's own light fringe.
@@ -49,7 +50,9 @@ public final class GraphicsCatalog {
         if(k.startsWith("end"))return "endSky";
         if(k.startsWith("wet"))return "wet";
         if(k.equals("weatherDrops")||k.startsWith("drop")||k.startsWith("stormDrop")||(k.startsWith("rain")&&!k.equals("rainDim")))return "drops";
-        if(k.startsWith("weather")||k.equals("rainDim"))return "weather";
+        if(k.equals("weatherSun")||k.equals("rainDim")||k.equals("weatherThunder"))return "weatherDay";
+        if(k.equals("weatherMoon")||k.equals("weatherNightDim")||k.equals("weatherThunderMoon"))return "weatherNight";
+        if(k.startsWith("weather"))return "weather";
         if(k.matches("water(Amplitude|Speed|Size)"))return "waterWaves";
         if(k.matches("water(Reflection|Refraction|Density|Visibility|ReflectionQuality|Steps|EdgeFade|FastTrace)"))return "waterOptics";
         if(k.startsWith("water")||k.startsWith("underwater"))return "waterEffects";
@@ -96,6 +99,8 @@ public final class GraphicsCatalog {
         for(String key:List.of("shadowCulling","filterOptimization","casterSelection","receiverScan","memoryOptimization","shadowMapOptimization","geometryOptimization","farShadowCache","gbuffer","gbufferView"))
             add(out,"shadow."+key,"siliconshaders.shaders.sun."+(key.equals("shadowCulling")?"culling":key),"diagnostics",key.equals("gbufferView")?0:1,0,key.equals("gbufferView")?5:1,1,!key.equals("gbufferView"),true,false,false);
         Map<String,Rule> ordered=new LinkedHashMap<>();for(String key:List.of("shadow.enabled","look.exposure","look.saturation","look.contrast","sun.moonShadows","shadow.size","shadow.distance","shadow.levels"))ordered.put(key,out.get(key));
+        // Match the two weather sections: direct light in rain, sky darkening in rain, then the thunder multiplier.
+        for(String key:List.of("sun.weatherSun","sun.rainDim","sun.weatherThunder","sun.weatherMoon","sun.weatherNightDim","sun.weatherThunderMoon"))ordered.put(key,out.get(key));
         // The two glows around a body sit side by side, whatever their place in the packet table.
         Map<String,String> besideGlow=Map.of("sun.celestialSunGlow","sun.sunGlare","sun.celestialMoonGlow","sun.moonGlare");
         out.forEach((key,rule)->{if(besideGlow.containsValue(key))return;ordered.putIfAbsent(key,rule);if(besideGlow.containsKey(key))ordered.put(besideGlow.get(key),out.get(besideGlow.get(key)));});
@@ -129,7 +134,7 @@ public final class GraphicsCatalog {
         return switch(r.group()){
             case "shadows"->"shadows";case "blockLight","coloredLight"->"blockLight";case "hand"->"hand";case "ssao"->"ssao";
             case "skyDay","skyGlow","skyNight","fog","nebula"->"sky";case "celestial","celestialSun","celestialMoon","moonDisplay"->"celestial";case "aurora"->"aurora";case "rainbow"->"rainbow";case "endSky"->"endSky";
-            case "weather"->"weather";case "drops"->"rain";case "wet"->"wetness";case "waterWaves","waterOptics","waterEffects"->"water";
+            case "weather","weatherDay","weatherNight"->"weather";case "drops"->"rain";case "wet"->"wetness";case "waterWaves","waterOptics","waterEffects"->"water";
             case "materials","materialGroups","transparent","reflections"->"materials";case "render"->"render";
             default->"light";
         };
@@ -203,29 +208,19 @@ public final class GraphicsCatalog {
     private static final Map<String,Range> USUAL=Map.of("sun.endFogStrength",new Range(0,1.5f),"sun.endFogBrightness",new Range(0,2),"sun.endFogDistance",new Range(64,512),"sun.endFogThickness",new Range(0,2),
         "sun.endFogEmber",new Range(0,2),"sun.fogDensity",new Range(0,.015f),"look.exposure",new Range(.5f,2),"look.saturation",new Range(.25f,1.5f),"look.contrast",new Range(.7f,1.4f));
     public static boolean extreme(String key,float value){Range usual=USUAL.get(key);return usual!=null&&(value<usual.low()-1e-4f||value>usual.high()+1e-4f);}
-    private static Map<String,Float> endDefaults(){Map<String,Float> out=new LinkedHashMap<>();for(var rule:rules("endSky"))out.put(rule.key(),rule.neutral());return out;}
-    /** The End's ready-made skies: only the End's own settings, so choosing one leaves the rest of the look alone. */
-    public static Map<String,Float> endHole(){var out=endDefaults();out.put("sun.endFog",0f);return out;}
-    public static Map<String,Float> endSaturn(){var out=endDefaults();out.put("sun.endPlanet",1f);out.put("sun.endFog",0f);return out;}
-    public static Map<String,Float> endNebula(){var out=endDefaults();out.put("sun.endBlackHole",0f);out.put("sun.endFogStrength",1.25f);return out;}
-    /** The lowest quality level with the costliest effects that are not part of it switched off. */
-    public static Map<String,Float> maxFps(){
-        Map<String,Float> out=defaults();out.put("shadow.enabled",1f);out.putAll(QUALITY_LEVELS.get(1));
-        out.put("sun.ssao",0f);out.put("sun.materialWorldReflections",0f);out.put("sun.coloredLight",0f);out.put("camera.enabled",0f);return out;
-    }
-    /** Quality levels for players: Standard (the values the mod ships with), Low, Medium, High, Ultra. Each sets the frame-time settings it names, clamped to their range. */
+    /** Standard follows the shipped profile. Levels set quality and their explicit effect choices; render scale stays manual. */
     public static final List<Map<String,Float>> QUALITY_LEVELS=qualityLevels();
     private static List<Map<String,Float>> qualityLevels(){
-        // The last two: render scale (the strongest lever measured: 2 is 67 %, 1 is 85 %, 0 full) and underwater half size.
-        var low=level(1024,64,2,1,8,.25f,2,2,2,16,2,2,12,32,3,2,2,.25f,8,8,2,1);
-        var medium=level(2048,96,3,0,16,.25f,1,1,1,24,1,1,20,48,4,1,3,.5f,12,12,1,1);
-        var high=level(2048,160,3,0,24,.5f,1,0,0,32,1,1,27,64,5,0,4,.5f,16,16,0,1);
-        var ultra=level(4096,224,4,0,32,.5f,0,0,0,40,0,0,40,96,7,0,5,.5f,24,24,0,0);
-        Map<String,Float> standard=new LinkedHashMap<>();for(String key:low.keySet())standard.put(key,RULES.get(key).neutral());
+        var low=effects(level(1024,64,2,1,8,.25f,2,2,2,12,2,2,12,32,3,2,2,.25f,8,8,1),false,false);
+        var medium=effects(level(2048,128,3,0,16,.25f,1,1,1,16,1,1,20,48,4,1,3,.5f,12,12,1),false,true);
+        var high=effects(level(4096,224,4,0,48,.5f,0,0,0,32,0,0,40,96,10,0,4,.5f,16,16,1),false,true);
+        var ultra=effects(level(4096,256,4,0,64,.5f,0,0,0,48,0,0,48,128,14,0,5,.5f,24,24,0),true,true);
+        Map<String,Float> shipped=DefaultProfile.source().values(),standard=new LinkedHashMap<>();
+        for(String key:low.keySet()){Rule rule=RULES.get(key);standard.put(key,nearest(rule,shipped.getOrDefault(key,rule.neutral())));}
         return List.of(Collections.unmodifiableMap(standard),low,medium,high,ultra);
     }
     private static Map<String,Float> level(float size,float distance,float levels,float halfShadow,float raySamples,float rayScale,float aurora,float waterReflection,
-        float underwater,float waterSteps,float reflectionQuality,float reflectionResolution,float reflectionSteps,float reflectionDistance,float coloredRange,float ssao,float bloomLevels,float bloomScale,float dofSamples,float motionSamples,float renderScale,float underwaterHalf){
+        float underwater,float waterSteps,float reflectionQuality,float reflectionResolution,float reflectionSteps,float reflectionDistance,float coloredRange,float ssao,float bloomLevels,float bloomScale,float dofSamples,float motionSamples,float underwaterHalf){
         Map<String,Float> m=new LinkedHashMap<>();
         m.put("shadow.size",size);m.put("shadow.distance",distance);m.put("shadow.levels",levels);m.put("sun.shadowHalfResolution",halfShadow);
         m.put("camera.raysSamples",raySamples);m.put("camera.raysScale",rayScale);m.put("sun.auroraQuality",aurora);
@@ -233,8 +228,14 @@ public final class GraphicsCatalog {
         m.put("sun.materialWorldReflectionQuality",reflectionQuality);m.put("sun.materialWorldReflectionResolution",reflectionResolution);
         m.put("sun.materialWorldReflectionSteps",reflectionSteps);m.put("sun.materialWorldReflectionDistance",reflectionDistance);m.put("sun.coloredLightRange",coloredRange);
         m.put("sun.ssaoQuality",ssao);m.put("camera.bloomLevels",bloomLevels);m.put("camera.bloomScale",bloomScale);m.put("camera.dofSamples",dofSamples);m.put("camera.motionSamples",motionSamples);
-        m.put("sun.renderScale",renderScale);m.put("sun.underwaterHalf",underwaterHalf);
+        m.put("sun.underwaterHalf",underwaterHalf);
         return Collections.unmodifiableMap(m);
+    }
+    private static Map<String,Float> effects(Map<String,Float> quality,boolean coloredLight,boolean waterReflection){
+        Map<String,Float> out=new LinkedHashMap<>(quality);out.put("sun.ssao",0f);out.put("sun.coloredLight",coloredLight?1f:0f);
+        Rule reflection=RULES.get("sun.waterReflection");
+        out.put(reflection.key(),waterReflection?nearest(reflection,DefaultProfile.source().values().getOrDefault(reflection.key(),reflection.neutral())):0f);
+        return Collections.unmodifiableMap(out);
     }
     public static Map<String,Float> defaults(){Map<String,Float> out=new LinkedHashMap<>();RULES.forEach((k,v)->out.put(k,v.neutral()));return out;}
     /**

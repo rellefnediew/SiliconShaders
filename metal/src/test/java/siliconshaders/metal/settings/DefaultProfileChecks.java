@@ -1,5 +1,7 @@
 package siliconshaders.metal.settings;
 
+import com.mojang.blaze3d.platform.Monitor;
+import com.mojang.blaze3d.platform.VideoMode;
 import java.nio.file.*;
 import java.util.*;
 import siliconshaders.metal.camera.CameraSettings;
@@ -42,6 +44,25 @@ public final class DefaultProfileChecks {
         // MetalFX proposal for screens wider than 1920: renders about 1920 pixels wide, never clearly less.
         int[][] scales={{1920,0},{2048,0},{2560,1},{2880,2},{3024,2},{3456,2},{3840,3},{5120,3}};
         for(int[] s:scales)require(StartupAdvice.recommendedScale(s[0])==s[1],"MetalFX proposal for width "+s[0]+": "+StartupAdvice.recommendedScale(s[0]));
+        resolutionChecks();
         System.out.println("PASS: Standard profile code complete and in range ("+standard.values().size()+" settings), applied and selected on a first start, never over the player's or imported MCOpt settings");
+    }
+
+    private static VideoMode mode(int width,int height,int hz){return new VideoMode(width,height,8,8,8,hz);}
+    private static Monitor monitor(VideoMode current,VideoMode... supported){return new Monitor("test",0,List.of(supported),current,0,0,current.getWidth(),current.getHeight());}
+    private static void resolutionChecks(){
+        VideoMode hd=mode(1920,1080,60),hdFast=mode(1920,1080,120),laptop=mode(1920,1200,60);
+        VideoMode retina=mode(3024,1964,120),fourK=mode(3840,2160,120);
+        Monitor mac=monitor(retina,hd,laptop,retina),screen=monitor(fourK,laptop,hd,hdFast,fourK);
+        require(StartupAdvice.fullHdMode(3024,1964,true,mac).orElseThrow().equals(laptop),"Retina must offer an applicable Full HD mode");
+        require(StartupAdvice.fullHdMode(3840,2160,true,screen).orElseThrow().equals(hdFast),"4K must offer 16:9 Full HD with the highest refresh rate");
+        require(StartupAdvice.fullHdMode(1280,800,false,mac).orElseThrow().equals(laptop),"Windowed mode must offer Full HD");
+        require(StartupAdvice.fullHdMode(1920,1080,false,screen).orElseThrow().equals(hdFast),"A Full HD window still needs a Full HD fullscreen mode");
+        require(StartupAdvice.fullHdMode(1920,1080,true,screen).isEmpty(),"Keep accepted 1080p fullscreen");
+        require(StartupAdvice.fullHdMode(1920,1200,true,mac).isEmpty(),"Keep accepted 1200p fullscreen");
+        require(StartupAdvice.fullHdMode(1920,1440,true,mac).isPresent(),"1920 pixels wide alone is not an accepted resolution");
+        require(StartupAdvice.fullHdMode(3840,2160,true,monitor(fourK,fourK)).isEmpty(),"Do not request an unsupported mode");
+        require(StartupAdvice.fullHdMode(1280,800,false,null).isEmpty(),"No monitor: no fullscreen change");
+        System.out.println("PASS: Full HD selection for Retina, 4K, windowed, accepted sizes, refresh rates and unsupported displays");
     }
 }

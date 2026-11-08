@@ -58,11 +58,7 @@ SiliconShaders is based on [mcopt](https://github.com/noahdunnagan/mcopt) by Noa
 <table>
   <tr>
     <td><img src=".github/images/end-planet.jpg" alt="Ringed planet and black hole over the End"></td>
-    <td><img src=".github/images/end-shadows.jpg" alt="Chorus plants casting shadows in the End"></td>
-  </tr>
-  <tr>
     <td><img src=".github/images/end-black-hole.jpg" alt="Black hole with glowing accretion disc"></td>
-    <td><img src=".github/images/end-pillars.jpg" alt="Obsidian pillars in front of the ringed planet"></td>
   </tr>
   <tr>
     <td colspan="2"><img src=".github/images/end-gateway.jpg" alt="End crystal beams and the black hole above the pillars"></td>

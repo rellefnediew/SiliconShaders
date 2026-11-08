@@ -21,6 +21,8 @@ import net.fabricmc.loader.api.entrypoint.PreLaunchEntrypoint;
  */
 public final class Preload implements PreLaunchEntrypoint {
 	static {
+		// A fresh installation starts with the Standard profile; before any settings store or flag is read.
+		siliconshaders.metal.settings.DefaultProfile.applyOnFirstStart(net.fabricmc.loader.api.FabricLoader.getInstance().getGameDir());
 		siliconshaders.metal.Profile.apply(); // before any flag is read
 	}
 

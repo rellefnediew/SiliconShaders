@@ -38,7 +38,7 @@ public final class GraphicsScreen extends Screen {
     private Component featureTitle(String id){return text("feature."+id);}
     private List<GraphicsProfile> presets(){
         Map<String,Float> natural=GraphicsCatalog.defaults();natural.put("shadow.enabled",1f);
-        GraphicsProfile standard=new GraphicsProfile("builtin.standard",text("preset.standard").getString(),GraphicsProfile.Scope.LOOK,GraphicsCatalog.portable(natural,GraphicsProfile.Scope.LOOK));
+        GraphicsProfile standard=DefaultProfile.get(text("preset.standard").getString()); // SiliconShaders' standard profile (resources/siliconshaders/default-profile.txt)
         Map<String,Float> soft=new LinkedHashMap<>(natural);soft.put("look.saturation",.95f);soft.put("look.contrast",.95f);soft.put("camera.bloom",1f);soft.put("camera.bloomStrength",.12f);
         Map<String,Float> cinema=new LinkedHashMap<>(natural);cinema.put("look.saturation",.9f);cinema.put("look.contrast",1.1f);cinema.put("camera.bloom",1f);cinema.put("camera.bloomStrength",.2f);cinema.put("camera.godrays",1f);cinema.put("camera.raysStrength",.35f);
         return List.of(standard,new GraphicsProfile("builtin.natural",text("preset.natural").getString(),GraphicsProfile.Scope.LOOK,GraphicsCatalog.portable(soft,GraphicsProfile.Scope.LOOK)),new GraphicsProfile("builtin.cinema",text("preset.cinema").getString(),GraphicsProfile.Scope.LOOK,GraphicsCatalog.portable(cinema,GraphicsProfile.Scope.LOOK)),

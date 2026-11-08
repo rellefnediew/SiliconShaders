@@ -280,6 +280,14 @@ tasks.register('graphicsMenuChecks', JavaExec) {
 
 check.dependsOn graphicsMenuChecks
 
+// The shipped Standard profile and its first-start application; temporary game directories only.
+tasks.register('defaultProfileChecks', JavaExec) {
+    dependsOn testClasses, processResources
+    classpath = sourceSets.test.runtimeClasspath
+    mainClass = 'siliconshaders.metal.settings.DefaultProfileChecks'
+}
+check.dependsOn defaultProfileChecks
+
 // Packet ABI, profile persistence and the two sprite hooks; no Minecraft window.
 tasks.register('celestialChecks', JavaExec) {
     dependsOn testClasses

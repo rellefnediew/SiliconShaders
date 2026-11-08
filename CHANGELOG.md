@@ -2,6 +2,9 @@
 
 ## 0.3.0-alpha.5
 
+- New **Standard profile**: a fresh installation starts with it, and it is the "Standard" preset in the graphics menu
+  (shadows 4096, bloom, light rays, film grain and a tuned picture). Existing settings and settings imported from MCOpt
+  are never replaced.
 - Faster entity shadows in the distance: while the far shadow map is reused from its cache, entities (including your
   own first-person body) are drawn into a small image covering only their rectangle instead of copying and redrawing
   the whole far map every frame. The result is identical texel for texel.

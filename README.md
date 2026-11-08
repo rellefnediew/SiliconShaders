@@ -35,6 +35,18 @@ SiliconShaders is based on [mcopt](https://github.com/noahdunnagan/mcopt) by Noa
     <td><img src=".github/images/rainbow.jpg" alt="Rainbow over a forest"></td>
     <td><img src=".github/images/materials.jpg" alt="Glossy block materials in the sun"></td>
   </tr>
+  <tr>
+    <td><img src=".github/images/aurora-village.jpg" alt="Aurora over a village at night"></td>
+    <td><img src=".github/images/ravine.jpg" alt="Glowing ravine at dusk"></td>
+  </tr>
+  <tr>
+    <td><img src=".github/images/rain-reflection.jpg" alt="Rain with reflections on a glossy surface"></td>
+    <td><img src=".github/images/menu-shader-packs.jpg" alt="Shader profiles and quality presets"></td>
+  </tr>
+  <tr>
+    <td><img src=".github/images/menu-picture.jpg" alt="Graphics menu: picture and colour settings"></td>
+    <td><img src=".github/images/menu-picture-scrolled.jpg" alt="Graphics menu: feature list"></td>
+  </tr>
 </table>
 
 ## Requirements

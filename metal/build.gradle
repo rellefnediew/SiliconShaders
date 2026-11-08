@@ -2,7 +2,7 @@ plugins {
 	id 'net.fabricmc.fabric-loom' version "${loom_version}"
 }
 
-version = '0.3.0-alpha.3'
+version = '0.3.0-alpha.4'
 base { archivesName = 'SiliconShaders' }
 
 // Share the verified archive reader/compiler with the standalone probe. Minecraft supplies LWJGL and Gson.

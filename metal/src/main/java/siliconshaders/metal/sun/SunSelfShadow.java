@@ -8,8 +8,13 @@ import net.minecraft.client.renderer.SubmitNodeStorage;
 import net.minecraft.client.renderer.feature.FeatureRenderDispatcher;
 import net.minecraft.client.renderer.state.level.CameraRenderState;
 
-/** Only the first-person body needs extra preparation: Minecraft deliberately omits it from the camera pass. */
+/**
+ * Only the first-person body needs extra preparation: Minecraft deliberately omits it from the camera pass.
+ * Off under Lunar Client: its entity and feature hooks also reach this extra player submit, which then shows up as a
+ * visible, lingering copy of the player in the world. -Dsiliconshaders.sun.selfShadow=true/false overrides the default.
+ */
 public final class SunSelfShadow {
+    public static final boolean ENABLED=enabled();
     public static boolean preparing;
     private static FeatureRenderDispatcher source,owner,shadowDispatcher;
     private static StagedVertexBuffer staging;
@@ -19,12 +24,30 @@ public final class SunSelfShadow {
     private static int batchCount;
     private SunSelfShadow() {}
 
+    private static boolean enabled() {
+        String forced=System.getProperty("siliconshaders.sun.selfShadow");
+        if(forced!=null)return Boolean.parseBoolean(forced);
+        if(!lunarClient())return true;
+        siliconshaders.metal.Log.info("[SiliconShaders sun] Lunar Client detected: first-person body shadow off (-Dsiliconshaders.sun.selfShadow=true turns it on)");
+        return false;
+    }
+
+    /** Lunar's launcher classes, or its mixins merged into Minecraft's feature dispatcher. */
+    static boolean lunarClient() {
+        for(ClassLoader loader:new ClassLoader[]{SunSelfShadow.class.getClassLoader(),ClassLoader.getSystemClassLoader(),Thread.currentThread().getContextClassLoader()})
+            if(loader!=null&&loader.getResource("com/moonsworth/lunar/genesis/Genesis.class")!=null)return true;
+        try {
+            for(var method:FeatureRenderDispatcher.class.getDeclaredMethods())if(method.getName().contains("lunar$"))return true;
+        } catch(Throwable ignored) {}
+        return false;
+    }
+
     public static void source(FeatureRenderDispatcher dispatcher) { if(!preparing)source=dispatcher; }
     public static int batchCount() { return batchCount; }
 
     public static void prepare(CameraRenderState camera) {
         batchCount=0;finish();var minecraft=Minecraft.getInstance();var player=minecraft.player;
-        if(source==null||player==null||player.isSpectator()||player.isInvisible()
+        if(!ENABLED||source==null||player==null||player.isSpectator()||player.isInvisible()
             ||minecraft.getCameraEntity()!=player||!minecraft.options.getCameraType().isFirstPerson())return;
         if(shadowDispatcher==null||source!=owner) {
             if(shadowDispatcher!=null){shadowDispatcher.close();staging.close();}

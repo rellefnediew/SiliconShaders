@@ -15,10 +15,27 @@
   <a href="LICENSE"><img src="https://img.shields.io/badge/license-Apache--2.0-blue" alt="License: Apache-2.0"></a>
 </p>
 
+<p align="center">
+  <img src=".github/images/aurora-lake.jpg" alt="Aurora and moon reflected in a lake at night">
+</p>
+
 SiliconShaders replaces Minecraft's renderer with one written for Metal, then adds shader effects on top: shadows,
 water, weather, sky and camera effects. It is not a shader pack and does not need Iris.
 
 SiliconShaders is based on [mcopt](https://github.com/noahdunnagan/mcopt) by Noah Dunnagan.
+
+## Screenshots
+
+<table>
+  <tr>
+    <td><img src=".github/images/cherry-grove.jpg" alt="Cherry grove in the sunlight"></td>
+    <td><img src=".github/images/sunset.jpg" alt="Sunset with light rays over a field"></td>
+  </tr>
+  <tr>
+    <td><img src=".github/images/rainbow.jpg" alt="Rainbow over a forest"></td>
+    <td><img src=".github/images/materials.jpg" alt="Glossy block materials in the sun"></td>
+  </tr>
+</table>
 
 ## Requirements
 

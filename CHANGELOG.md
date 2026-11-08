@@ -2,6 +2,7 @@
 
 ## 0.3.0-alpha.4
 
+- Announced: a ray tracing update for Macs with M3 or newer is in the works.
 - Fixed: with Lunar Client, a lingering copy of your own player (including cosmetics) could appear in the world.
   The first-person body shadow is now off under Lunar Client; -Dsiliconshaders.sun.selfShadow=true turns it back on.
 - Shadow casters are only collected from Minecraft's own world rendering, not from extra render calls of other mods.

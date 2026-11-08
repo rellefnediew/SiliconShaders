@@ -24,6 +24,10 @@ water, weather, sky and camera effects. It is not a shader pack and does not nee
 
 SiliconShaders is based on [mcopt](https://github.com/noahdunnagan/mcopt) by Noah Dunnagan.
 
+> [!NOTE]
+> **Coming soon: ray tracing.** An upcoming update adds ray-traced lighting for Macs with an **M3 chip or newer**,
+> using the hardware ray tracing built into these chips. M1 and M2 Macs keep the current renderer.
+
 ## Screenshots
 
 <table>

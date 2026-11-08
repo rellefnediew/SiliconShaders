@@ -1,10 +1,12 @@
 // Optional camera effects. All work stays on the existing frame command buffer.
-typedef struct {simd_float4x4 inverse,previous;simd_float4 screen,light,lightColor;simd_float4 p[16];} OwnCameraFrame;
-_Static_assert(sizeof(OwnCameraFrame)==432,"Camera packet ABI");
+// grain: on, strength, size in pixels at 1080 lines. Packets from before film grain end at 432 bytes and leave it off.
+typedef struct {simd_float4x4 inverse,previous;simd_float4 screen,light,lightColor;simd_float4 p[16];simd_float4 grain;} OwnCameraFrame;
+_Static_assert(sizeof(OwnCameraFrame)==448,"Camera packet ABI");
+#define CAMERA_LEGACY_PACKET 432
 typedef struct {simd_float4 info,screen[8],direction[8];} OwnCameraEmitter;
 typedef struct {
     NSMutableDictionary *pipelines;BOOL hdr,hdrFallbackWarned;OwnSunLighting tone;
-    id<MTLTexture> colorCopy,depthCopy,blur,bloom[5],probe[2],dofHalf[2],dofTile[2],dof,rays;
+    id<MTLTexture> colorCopy,depthCopy,blur,bloom[5],probe[2],dofHalf[2],dofTile[2],dof,rays,grain;
     int probeIndex,probeValid,lastMask,lastFetch;
     uint64_t passes,colorCopies,depthCopies;
     simd_float4 raysColor;
@@ -38,7 +40,7 @@ static void cameraEmission(Own *w,OwnCameraPost *c,OwnCameraFrame *f) {
 }
 static float cameraParam(const OwnCameraFrame *f,int i){return f->p[i/4][i%4];}
 static void cameraDropImages(OwnCameraPost *c){
-    [c->colorCopy release];c->colorCopy=nil;[c->depthCopy release];c->depthCopy=nil;[c->blur release];c->blur=nil;[c->rays release];c->rays=nil;
+    [c->colorCopy release];c->colorCopy=nil;[c->depthCopy release];c->depthCopy=nil;[c->blur release];c->blur=nil;[c->rays release];c->rays=nil;[c->grain release];c->grain=nil;
     for(int i=0;i<5;i++){[c->bloom[i] release];c->bloom[i]=nil;}
     for(int i=0;i<2;i++){[c->probe[i] release];c->probe[i]=nil;[c->dofHalf[i] release];c->dofHalf[i]=nil;[c->dofTile[i] release];c->dofTile[i]=nil;}c->probeValid=0;[c->dof release];c->dof=nil;
 }
@@ -58,18 +60,28 @@ static BOOL cameraImage(Own *w,id<MTLTexture> *slot,NSUInteger width,NSUInteger 
     id<MTLTexture> next=[w->ctx->device newTextureWithDescriptor:td];if(!next)return NO;
     [*slot release];*slot=next;return YES;
 }
+// Film grain reads one tiling 256x256 white-noise image (64 KB, made once) with a single filtered sample per pixel.
+static BOOL cameraGrainNoise(Own *w,OwnCameraPost *c){
+    if(c->grain)return YES;
+    MTLTextureDescriptor *td=[MTLTextureDescriptor texture2DDescriptorWithPixelFormat:MTLPixelFormatR8Unorm width:256 height:256 mipmapped:NO];
+    td.storageMode=MTLStorageModeShared;td.usage=MTLTextureUsageShaderRead;id<MTLTexture> next=[w->ctx->device newTextureWithDescriptor:td];if(!next)return NO;
+    uint8_t *noise=malloc(256*256);if(!noise){[next release];return NO;}uint32_t state=0x9E3779B9u;
+    for(int i=0;i<256*256;i++){state^=state<<13;state^=state>>17;state^=state<<5;noise[i]=(uint8_t)(state>>24);}
+    [next replaceRegion:MTLRegionMake2D(0,0,256,256) mipmapLevel:0 withBytes:noise bytesPerRow:256];free(noise);c->grain=next;return YES;
+}
 static void cameraPipelineRemember(OwnCameraPost *c,const char *function,MTLPixelFormat format,int mask,uint32_t rayLevels,BOOL additive,BOOL optimized,id<MTLRenderPipelineState> pipeline){
     if(c->recentCount==32)return;__typeof__(c->recent[0]) *r=&c->recent[c->recentCount++];
     r->function=function;r->format=format;r->mask=mask;r->rayLevels=rayLevels;r->additive=additive;r->optimized=optimized;r->hdr=c->hdr;r->pipeline=pipeline;
 }
 static id<MTLRenderPipelineState> cameraPipelineVariant(Own *w,OwnCameraPost *c,const char *function,MTLPixelFormat format,int mask,BOOL additive,BOOL optimized,char *err,int cap){
     uint32_t rayLevels=!strcmp(function,"camera_rays_fs")?(uint32_t)mask:0;
-    if(strstr(function,"bloom")||strstr(function,"dof")||strstr(function,"rays"))mask=0;else if(strstr(function,"probe"))mask&=2|8;else if(strstr(function,"blur"))mask&=4;else mask&=1|8|16|32|64|128;
+    if(strstr(function,"bloom")||strstr(function,"dof")||strstr(function,"rays"))mask=0;else if(strstr(function,"probe"))mask&=2|8;else if(strstr(function,"blur"))mask&=4;else mask&=1|8|16|32|64|128|256;
     for(int i=0;i<c->recentCount;i++){__typeof__(c->recent[0]) *r=&c->recent[i];if(r->function==function&&r->format==format&&r->mask==mask&&r->rayLevels==rayLevels&&r->additive==additive&&r->optimized==optimized&&r->hdr==c->hdr)return r->pipeline;}
     NSString *key=[NSString stringWithFormat:@"%s/%lu/%d/%d/%u/%d/%d",function,(unsigned long)format,mask,additive,rayLevels,optimized,c->hdr];id<MTLRenderPipelineState> cached=c->pipelines[key];
     if(cached){cameraPipelineRemember(c,function,format,mask,rayLevels,additive,optimized,cached);return cached;}
     NSError *issue=nil;MTLFunctionConstantValues *constants=[[[MTLFunctionConstantValues alloc] init] autorelease];
     for(int i=0;i<8;i++){bool on=(mask&(1<<i))!=0;[constants setConstantValue:&on type:MTLDataTypeBool atIndex:40+i];}
+    bool grain=(mask&256)!=0;[constants setConstantValue:&grain type:MTLDataTypeBool atIndex:53];
     if(rayLevels)[constants setConstantValue:&rayLevels type:MTLDataTypeUInt atIndex:48];
     bool hdr=c->hdr;[constants setConstantValue:&hdr type:MTLDataTypeBool atIndex:54];
     bool optimizedRays=optimized;[constants setConstantValue:&optimizedRays type:MTLDataTypeBool atIndex:49];
@@ -89,7 +101,7 @@ static void cameraDraw(OwnCameraPost *c,Enc *enc,id<MTLCommandBuffer> command,id
     [r setViewport:(MTLViewport){0,0,target.width,target.height,0,1}];[r setFragmentBytes:frame length:sizeof *frame atIndex:0];[r setFragmentBytes:&pass length:16 atIndex:1];if(rays)[r setFragmentBytes:&c->raysColor length:16 atIndex:2];
     if(c->hdr)[r setFragmentBytes:&c->tone length:sizeof c->tone atIndex:4];
     [r setFragmentBytes:&c->emitter length:sizeof c->emitter atIndex:6];
-    [r setFragmentTexture:source atIndex:0];[r setFragmentTexture:depth atIndex:1];[r setFragmentTexture:probe atIndex:2];[r setFragmentTexture:bloom atIndex:3];[r setFragmentTexture:rays atIndex:4];
+    [r setFragmentTexture:source atIndex:0];[r setFragmentTexture:depth atIndex:1];[r setFragmentTexture:probe atIndex:2];[r setFragmentTexture:bloom atIndex:3];[r setFragmentTexture:rays atIndex:4];if(c->grain)[r setFragmentTexture:c->grain atIndex:5];
     [r drawPrimitives:MTLPrimitiveTypeTriangle vertexStart:0 vertexCount:3];[r endEncoding];[r release];c->passes++;
 }
 static int cameraMask(const OwnCameraFrame *f){
@@ -102,6 +114,7 @@ static int cameraMask(const OwnCameraFrame *f){
     if(cameraParam(f,36)>.5&&cameraParam(f,37)>0)mask|=32;
     if(cameraParam(f,44)>.5&&cameraParam(f,45)>0&&cameraParam(f,47)>0)mask|=64;
     if(cameraParam(f,48)>.5&&cameraParam(f,49)>0)mask|=128;
+    if(f->grain.x>.5&&f->grain.y>0&&f->grain.z>0)mask|=256;
     return mask;
 }
 typedef struct {simd_float4x4 clips[4];simd_float4 bias,light,info,color;} OwnCameraRays;
@@ -133,9 +146,9 @@ static void cameraRaysDraw(Own *w,OwnCameraPost *c,Enc *enc,id<MTLCommandBuffer>
 }
 static int cameraPostImpl(Own *w,Enc *enc,id<MTLTexture> color,id<MTLTexture> depth,id<MTLTexture> output,BOOL hdr,const void *data,int length,char *err,int cap){
  @autoreleasepool {
-    if(!w||!enc||!data||length!=sizeof(OwnCameraFrame))return -1;
+    if(!w||!enc||!data||(length!=sizeof(OwnCameraFrame)&&length!=CAMERA_LEGACY_PACKET))return -1;
     const float *values=data;for(int i=0;i<length/4;i++)if(!isfinite(values[i])){snprintf(err,cap,"Nonfinite camera packet");return -1;}
-    OwnCameraFrame f;memcpy(&f,data,sizeof f);int mask=cameraMask(&f);
+    OwnCameraFrame f;memset(&f,0,sizeof f);memcpy(&f,data,length);int mask=cameraMask(&f);
     if((mask&128)&&(!w->sunActive||w->sunCascaded<2||w->sunCascaded>4||!w->sunMap||!w->sunSampler||*(const float *)(w->sunFrame+108)<=0||
         cameraParam(&f,59)<0||(w->sunMoonLight&&cameraParam(&f,55)<=0)||(cameraParam(&f,59)>.5&&cameraParam(&f,56)<=0)))mask&=~128;
     if(mask&128){float range=*(const float *)(w->sunBlendFrame+144);f.p[12].w=fminf(f.p[12].w,fmaxf(1,range));if(cameraParam(&f,59)>.5)f.p[12].w=fminf(f.p[12].w,32);}
@@ -162,6 +175,7 @@ static int cameraPostImpl(Own *w,Enc *enc,id<MTLTexture> color,id<MTLTexture> de
     id<MTLRenderPipelineState> composite=cameraPipelineVariant(w,c,w->cameraRaysReference?(fetch?"camera_ref_composite_fetch_fs":"camera_ref_composite_fs"):(fetch?"camera_composite_fetch_fs":"camera_composite_fs"),output.pixelFormat,mask,NO,optimized,err,cap);
     if(!composite&&fetch){fetch=NO;composite=cameraPipelineVariant(w,c,w->cameraRaysReference?"camera_ref_composite_fs":"camera_composite_fs",output.pixelFormat,mask,NO,optimized,err,cap);}
     if(!composite)return -1;c->lastFetch=fetch;
+    if(mask&256){if(!cameraGrainNoise(w,c))return -1;}else{[c->grain release];c->grain=nil;}
     BOOL probe=(mask&(2|8))!=0; // one GPU texel, even with manual focus, never a CPU depth read
     id<MTLRenderPipelineState> blurPipeline=nil,probePipeline=nil,down=nil,up=nil;
     BOOL dof=(mask&2)!=0,motion=(mask&4)!=0;id<MTLRenderPipelineState> dofPrefilter=nil,dofTiles=nil,dofDilate=nil,dofGather=nil,dofComposite=nil;

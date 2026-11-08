@@ -1,5 +1,12 @@
 # Changelog
 
+## 0.3.0-alpha.5
+
+- New camera effect: **film grain** (Camera → Film grain). Fine, moving grain that is strongest in midtones and
+  changes 24 times a second like real film. Settings: strength and grain size. Off by default.
+  It is the last step of the existing camera pass and costs about 0.05 ms per frame at 1080p on an M1 Pro when another
+  camera effect is on (about 0.15 ms at 3024x1890).
+
 ## 0.3.0-alpha.4
 
 - Announced: a ray tracing update for Macs with M3 or newer is in the works.

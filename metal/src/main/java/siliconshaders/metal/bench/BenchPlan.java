@@ -103,7 +103,7 @@ public final class BenchPlan {
         all.add(tune("spritzer-an","Regenspritzer an","rainSplashes",1));
         all.add(tune("polarlicht-an","Polarlicht an","aurora",3));
         all.add(tune("polarlicht-aus","Polarlicht aus","aurora",0));
-        for(String key:List.of("bloom","dof","motion","flare","chroma","vignette","sharpen","godrays"))
+        for(String key:List.of("bloom","dof","motion","flare","chroma","vignette","sharpen","godrays","filmGrain"))
             all.add(new Variant("kamera-"+key,key,Base.STANDARD,Map.of(),Map.of(),Map.of(key,1f)));
         all.add(new Variant("bloom-hdr","HDR Bloom",Base.STANDARD,Map.of(),Map.of(),Map.of("bloom",1f,"bloomVariant",1f)));
         all.add(new Variant("rays-volumetrisch","Volumetrische Godrays",Base.STANDARD,Map.of(),Map.of(),Map.of("godrays",1f,"raysVariant",1f)));

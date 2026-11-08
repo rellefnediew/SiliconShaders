@@ -13,7 +13,7 @@ public final class GraphicsCatalog {
     public record Rule(String key,String label,String group,float neutral,float min,float max,float step,boolean toggle,boolean basic,boolean shareable,boolean quality) {
         public float normalize(float value){if(!Float.isFinite(value)||value<min-.0001f||value>max+.0001f)throw new IllegalArgumentException("profile.range");return Math.clamp(Math.round(value/step)*step,min,max);}
     }
-    private static final Set<String> BASIC=Set.of("sunNoonR","sunNoon","sunSetR","sunSet","sunsetR","sunset","skyDayR","skyDay","sunGlare","moonGlare","moonLightR","blockR","block","minimum","coloredLight","handLight","handIntensity","handRange","moonLight","moonShadows","ssao","ssaoStrength","ssaoRadius","skyEnabled","skyUpR","skyUp","nightUpR","nightUp","nightStars","aurora","auroraStrength","auroraCount","auroraCurtainR","auroraCrownR","nightNebula","nebulaDeepR","nebulaGlowR","nebulaScale","rainbows","rainbowStrength","endBlackHole","endPlanet","endRingTransparency","endLightElevation","endLightStrength","endHoleSize","endDiscBrightness","endStars","endFog","endFogStrength","endFogColorR","endFogHeight","fogDensity","weather","weatherDrops","wetSurfaces","waterAmplitude","waterSpeed","waterDensity","waterVisibility","waterCaustics","waterRefraction","waterReflection","materials","materialGloss","materialEmission","materialMetal","materialGlass","materialWorldReflections","enabled","bloom","bloomStrength","bloomRadius","dof","autoFocus","focusDistance","dofRadius","motion","motionStrength","flare","flareStrength","vignette","vignetteStrength","chromaStrength","sharpen","sharpenStrength","godrays","raysStrength","raysDensity","raysDistance");
+    private static final Set<String> BASIC=Set.of("filmGrain","grainStrength","grainSize","sunNoonR","sunNoon","sunSetR","sunSet","sunsetR","sunset","skyDayR","skyDay","sunGlare","moonGlare","moonLightR","blockR","block","minimum","coloredLight","handLight","handIntensity","handRange","moonLight","moonShadows","ssao","ssaoStrength","ssaoRadius","skyEnabled","skyUpR","skyUp","nightUpR","nightUp","nightStars","aurora","auroraStrength","auroraCount","auroraCurtainR","auroraCrownR","nightNebula","nebulaDeepR","nebulaGlowR","nebulaScale","rainbows","rainbowStrength","endBlackHole","endPlanet","endRingTransparency","endLightElevation","endLightStrength","endHoleSize","endDiscBrightness","endStars","endFog","endFogStrength","endFogColorR","endFogHeight","fogDensity","weather","weatherDrops","wetSurfaces","waterAmplitude","waterSpeed","waterDensity","waterVisibility","waterCaustics","waterRefraction","waterReflection","materials","materialGloss","materialEmission","materialMetal","materialGlass","materialWorldReflections","enabled","bloom","bloomStrength","bloomRadius","dof","autoFocus","focusDistance","dofRadius","motion","motionStrength","flare","flareStrength","vignette","vignetteStrength","chromaStrength","sharpen","sharpenStrength","godrays","raysStrength","raysDensity","raysDistance");
     /** A color's channels stay together: naming the red channel takes green and blue along. */
     private static boolean basic(String key){
         if(BASIC.contains(key))return true;
@@ -22,7 +22,7 @@ public final class GraphicsCatalog {
     /** Headings inside a feature, in display order. */
     public static final List<String> GROUP_ORDER=List.of("picture","sun","skyLight","moon","moonPhases","misc","shadows","blockLight","coloredLight","hand","ssao",
         "skyDay","skyGlow","skyNight","fog","nebula","celestialSun","celestialMoon","moonDisplay","celestial","aurora","rainbow","endSky","weather","drops","wet","waterWaves","waterOptics","waterEffects",
-        "materials","materialGroups","transparent","reflections","general","bloom","godrays","dof","motion","flare","chroma","vignette","sharpen","render","diagnostics");
+        "materials","materialGroups","transparent","reflections","general","bloom","godrays","dof","motion","flare","chroma","vignette","sharpen","grain","render","diagnostics");
     private static String sunGroup(String k){
         // The sky's glow around a body sits beside the body's own light fringe.
         if(k.endsWith("Glare"))return k.startsWith("moon")?"celestialMoon":"celestialSun";
@@ -110,7 +110,8 @@ public final class GraphicsCatalog {
         new Feature("weather","world","sun.weather"),new Feature("rain","world","sun.weatherDrops"),new Feature("wetness","world","sun.wetSurfaces"),new Feature("water","world",null),new Feature("materials","world","sun.materials"),
         new Feature("camera","camera","camera.enabled"),new Feature("godrays","camera","camera.godrays"),new Feature("bloom","camera","camera.bloom"),new Feature("dof","camera","camera.dof"),
         new Feature("motion","camera","camera.motion"),new Feature("flare","camera","camera.flare"),new Feature("chroma","camera","camera.chroma"),new Feature("vignette","camera","camera.vignette"),
-        new Feature("sharpen","camera","camera.sharpen"),new Feature("render","performance",null));
+        new Feature("sharpen","camera","camera.sharpen"),
+        new Feature("grain","camera","camera.filmGrain"),new Feature("render","performance",null));
     /** Within a feature: what it looks like, what it costs, rarely used extras, implementation switches for developers. */
     public enum Tier { LOOK, QUALITY, MORE, DEVELOPER }
     public static Tier tier(Rule r){if(r.group().equals("diagnostics"))return Tier.DEVELOPER;if(r.quality())return Tier.QUALITY;return r.basic()?Tier.LOOK:Tier.MORE;}

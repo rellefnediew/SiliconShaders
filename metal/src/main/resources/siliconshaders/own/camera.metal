@@ -11,7 +11,8 @@ constant bool CAMERA_SHARPEN [[function_constant(46)]];
 constant bool CAMERA_RAYS [[function_constant(47)]];
 constant uint CAMERA_RAY_LEVELS [[function_constant(48)]];
 constant bool CAMERA_RAYS_OPTIMIZED [[function_constant(49)]];
-struct CameraFrame { float4x4 inverse,previous;float4 screen,light,lightColor;float4 p[16]; };
+constant bool CAMERA_GRAIN [[function_constant(53)]];
+struct CameraFrame { float4x4 inverse,previous;float4 screen,light,lightColor;float4 p[16];float4 grain; };
 struct CameraEmitter {float4 info,screen[8],direction[8];};
 static float cameraP(constant CameraFrame &f,uint i){return f.p[i>>2][i&3];}
 static float3 cameraLinear(float3 color,constant CameraFrame &f){return f.screen.w>.5?max(color,0.0):pow(max(color,0.0),2.2);}
@@ -396,12 +397,27 @@ static float3 cameraDecorate(float3 color,float2 uv,constant CameraFrame &f,text
     if(CAMERA_VIGNETTE){float2 p=abs((uv-.5)*2);float radius=mix(max(p.x,p.y),length(p)*.70710678,cameraP(f,40));float amount=smoothstep(cameraP(f,38),cameraP(f,38)+cameraP(f,39),radius)*cameraP(f,37);color=mix(color,pow(float3(cameraP(f,41),cameraP(f,42),cameraP(f,43)),2.2),amount);}
     return color;
 }
+// Film grain: the last step, on the display image, so it never feeds bloom, sharpening or exposure. One filtered sample of a
+// tiling 256x256 white-noise image per pixel (the sampler interpolates larger grain for free); it only reads its own pixel,
+// so the framebuffer-fetch path stays available. Grain cells are sized in pixels at 1080 lines of this target: Retina and
+// lower render scales keep the same visible grain. The image jumps to a new random offset 24 times a second, like film,
+// instead of every frame, and the grain is strongest in midtones as in real film.
+static float3 cameraGrain(float3 color,float2 position,constant CameraFrame &f,bool srgbTarget,texture2d<float> noiseImage){
+    constexpr sampler tiling(coord::normalized,address::repeat,filter::linear);
+    float size=max(max(f.grain.z,1.0)*f.screen.y/1080.0,1.0); // never below one pixel: no shimmer
+    uint frame=uint(max(f.lightColor.w,0.0)*24.0)*2654435761u;float2 jump=float2(frame>>24,(frame>>16)&255u)*(1.0/256.0);
+    float noise=(noiseImage.sample(tiling,position/(size*256.0)+jump).r-.5)*2.0;
+    float3 shown=srgbTarget?pow(max(color,0.0),1.0/2.2):color; // perceptual space even when the target encodes sRGB itself
+    float luma=dot(saturate(shown),float3(.2126,.7152,.0722));
+    shown=max(shown+noise*f.grain.y*.12*(.3+2.8*luma*(1-luma)),0.0);
+    return srgbTarget?pow(shown,2.2):shown;
+}
 // The original path stays byte-for-byte compatible. HDR inputs remain scene-referred until this last step.
 static float3 cameraFinalDisplay(float3 color,constant CameraFrame &f,constant SunLighting &tone,constant float4 &output){
     if(!CAMERA_HDR)return cameraDisplay(color,f);
     float3 mapped=sunToneMap(max(color,0.0),tone);return output.w>.5?mapped:pow(mapped,1.0/2.2);
 }
-fragment float4 camera_composite_fs(SunScreenVertex in [[stage_in]],constant CameraFrame &f [[buffer(0)]],texture2d<float> scene [[texture(0)]],texture2d<float> bloom [[texture(3)]],texture2d<float,access::read> probe [[texture(2)]],texture2d<float,access::read> rays [[texture(4)]],depth2d<float,access::read> depth [[texture(1)]],constant float4 &rayColor [[buffer(2)]],constant SunLighting &tone [[buffer(4),function_constant(CAMERA_HDR)]],constant float4 &output [[buffer(1),function_constant(CAMERA_HDR)]],constant CameraEmitter &emitter [[buffer(6)]]) {
+fragment float4 camera_composite_fs(SunScreenVertex in [[stage_in]],constant CameraFrame &f [[buffer(0)]],texture2d<float> scene [[texture(0)]],texture2d<float> bloom [[texture(3)]],texture2d<float,access::read> probe [[texture(2)]],texture2d<float,access::read> rays [[texture(4)]],depth2d<float,access::read> depth [[texture(1)]],constant float4 &rayColor [[buffer(2)]],constant SunLighting &tone [[buffer(4),function_constant(CAMERA_HDR)]],constant float4 &output [[buffer(1),function_constant(CAMERA_HDR)]],constant CameraEmitter &emitter [[buffer(6)]],texture2d<float> grainNoise [[texture(5)]]) {
     constexpr sampler linear(coord::normalized,address::clamp_to_edge,filter::linear);
     float2 uv=in.position.xy/f.screen.xy;float4 source=scene.sample(linear,uv);float3 color=cameraLinear(source.rgb,f);
     if(CAMERA_CHROMA){
@@ -420,10 +436,13 @@ fragment float4 camera_composite_fs(SunScreenVertex in [[stage_in]],constant Cam
     }
     if(CAMERA_SHARPEN){float2 d=cameraP(f,46)/f.screen.xy;float3 neighbors=(cameraLinear(scene.sample(linear,uv+float2(d.x,0)).rgb,f)+cameraLinear(scene.sample(linear,uv-float2(d.x,0)).rgb,f)+cameraLinear(scene.sample(linear,uv+float2(0,d.y)).rgb,f)+cameraLinear(scene.sample(linear,uv-float2(0,d.y)).rgb,f))*.25;color+=clamp((color-neighbors)*cameraP(f,45),-cameraP(f,47),cameraP(f,47));}
     float3 decorated=cameraDecorate(max(color,0.0),uv,f,bloom,probe,rays,depth,rayColor,emitter);
-    if(CAMERA_HDR)return float4(cameraFinalDisplay(decorated,f,tone,output),source.a);
-    return float4(cameraDisplay(decorated,f),source.a);
+    if(CAMERA_HDR){float3 shown=cameraFinalDisplay(decorated,f,tone,output);if(CAMERA_GRAIN)shown=cameraGrain(shown,in.position.xy,f,output.w>.5,grainNoise);return float4(shown,source.a);}
+    float3 shown=cameraDisplay(decorated,f);if(CAMERA_GRAIN)shown=cameraGrain(shown,in.position.xy,f,f.screen.w>.5,grainNoise);
+    return float4(shown,source.a);
 }
 // Only same-pixel operations: framebuffer fetch avoids a full-size source copy on Apple GPUs.
-fragment float4 camera_composite_fetch_fs(SunScreenVertex in [[stage_in]],float4 prior [[color(0)]],constant CameraFrame &f [[buffer(0)]],texture2d<float> bloom [[texture(3)]],texture2d<float,access::read> probe [[texture(2)]],texture2d<float,access::read> rays [[texture(4)]],depth2d<float,access::read> depth [[texture(1)]],constant float4 &rayColor [[buffer(2)]],constant CameraEmitter &emitter [[buffer(6)]]) {
-    float2 uv=in.position.xy/f.screen.xy;return float4(cameraDisplay(cameraDecorate(cameraLinear(prior.rgb,f),uv,f,bloom,probe,rays,depth,rayColor,emitter),f),prior.a);
+fragment float4 camera_composite_fetch_fs(SunScreenVertex in [[stage_in]],float4 prior [[color(0)]],constant CameraFrame &f [[buffer(0)]],texture2d<float> bloom [[texture(3)]],texture2d<float,access::read> probe [[texture(2)]],texture2d<float,access::read> rays [[texture(4)]],depth2d<float,access::read> depth [[texture(1)]],constant float4 &rayColor [[buffer(2)]],constant CameraEmitter &emitter [[buffer(6)]],texture2d<float> grainNoise [[texture(5)]]) {
+    float2 uv=in.position.xy/f.screen.xy;float3 shown=cameraDisplay(cameraDecorate(cameraLinear(prior.rgb,f),uv,f,bloom,probe,rays,depth,rayColor,emitter),f);
+    if(CAMERA_GRAIN)shown=cameraGrain(shown,in.position.xy,f,f.screen.w>.5,grainNoise);
+    return float4(shown,prior.a);
 }

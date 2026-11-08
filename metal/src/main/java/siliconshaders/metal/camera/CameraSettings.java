@@ -7,7 +7,7 @@ import net.fabricmc.loader.api.FabricLoader;
 
 /** Persisted camera controls; independent of the lighting and water packet layouts. */
 public final class CameraSettings {
-    public enum Group { GENERAL, BLOOM, DOF, MOTION, FLARE, CHROMA, VIGNETTE, SHARPEN, GODRAYS }
+    public enum Group { GENERAL, BLOOM, DOF, MOTION, FLARE, CHROMA, VIGNETTE, SHARPEN, GODRAYS, GRAIN }
     public record Param(String key,Group group,float neutral,float min,float max,float step) {
         public boolean toggle(){return !key.equals("raysVariant")&&!key.equals("bloomVariant")&&min==0&&max==1&&step==1;}
         public float clamp(float v){return Math.clamp(Math.round(v/step)*step,min,max);}
@@ -71,14 +71,20 @@ public final class CameraSettings {
         new Param("raysMoon",Group.GODRAYS,0.3f,0,2,0.05f),
         new Param("raysUnderwater",Group.GODRAYS,1,0,3,0.05f),
         new Param("raysVariant",Group.GODRAYS,0,0,1,1),
-        new Param("bloomVariant",Group.BLOOM,0,0,1,1));
+        new Param("bloomVariant",Group.BLOOM,0,0,1,1),
+        // Beyond the 59 packet slots: the runtime packet carries these in its own trailing float4.
+        new Param("filmGrain",Group.GRAIN,0,0,1,1),
+        new Param("grainStrength",Group.GRAIN,0.25f,0.01f,1,0.01f),
+        new Param("grainSize",Group.GRAIN,1.5f,1,4,0.1f));
     public static final int COUNT=PARAMS.size();
     public static final int ENABLED=index("enabled"),BLOOM=index("bloom"),BLOOM_STRENGTH=index("bloomStrength"),BLOOM_VARIANT=index("bloomVariant"),
         DOF=index("dof"),DOF_RADIUS=index("dofRadius"),DOF_NEAR=index("dofNear"),DOF_FAR=index("dofFar"),
         MOTION=index("motion"),MOTION_STRENGTH=index("motionStrength"),SHUTTER=index("shutterMs"),MOTION_MAX=index("motionMax"),
         FLARE=index("flare"),FLARE_STRENGTH=index("flareStrength"),FLARE_MOON=index("flareMoon"),CHROMA=index("chroma"),CHROMA_STRENGTH=index("chromaStrength"),
         VIGNETTE=index("vignette"),VIGNETTE_STRENGTH=index("vignetteStrength"),SHARPEN=index("sharpen"),SHARPEN_STRENGTH=index("sharpenStrength"),SHARPEN_CLAMP=index("sharpenClamp"),
-        GODRAYS=index("godrays"),RAYS_STRENGTH=index("raysStrength");
+        GODRAYS=index("godrays"),RAYS_STRENGTH=index("raysStrength"),FILM_GRAIN=index("filmGrain"),GRAIN_STRENGTH=index("grainStrength"),GRAIN_SIZE=index("grainSize");
+    /** Controls written to the packet's 59 float slots; the remaining slots carry runtime data. */
+    public static final int PACKET_PARAMS=59;
     public static boolean hdrBloom(float[] values){return values[ENABLED]>.5f&&values[BLOOM]>.5f&&values[BLOOM_STRENGTH]>0&&values[BLOOM_VARIANT]>.5f;}
     public boolean hdrBloom(){return hdrBloom(values);}
     private static final Gson JSON=new GsonBuilder().setPrettyPrinting().create();
@@ -141,6 +147,7 @@ public final class CameraSettings {
         if(v[VIGNETTE]>.5f&&v[VIGNETTE_STRENGTH]>0)mask|=32;
         if(v[SHARPEN]>.5f&&v[SHARPEN_STRENGTH]>0&&v[SHARPEN_CLAMP]>0)mask|=64;
         if(v[GODRAYS]>.5f&&v[RAYS_STRENGTH]>0)mask|=128;
+        if(v[FILM_GRAIN]>.5f&&v[GRAIN_STRENGTH]>0)mask|=256;
         return mask;
     }
 }

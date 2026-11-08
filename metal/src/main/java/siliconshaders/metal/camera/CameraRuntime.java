@@ -11,7 +11,7 @@ import org.lwjgl.system.MemoryUtil;
 
 /** Compose once after water and before the hand's depth clear; hands and HUD stay sharp. */
 public final class CameraRuntime {
-    public static final int BYTES=432;
+    public static final int BYTES=448;
     private static final CameraHistory HISTORY=new CameraHistory();
     private static final Matrix4f INVERSE=new Matrix4f(),PREVIOUS=new Matrix4f();
     private static final Vector4f LIGHT=new Vector4f();
@@ -45,7 +45,8 @@ public final class CameraRuntime {
         MemoryUtil.memPutFloat(p+136,dt); // screen.z; native fills width, height, transfer function
         MemoryUtil.memPutFloat(p+144,LIGHT.x);MemoryUtil.memPutFloat(p+148,LIGHT.y);MemoryUtil.memPutFloat(p+152,lightStrength);MemoryUtil.memPutFloat(p+156,historyValid?1:0);
         MemoryUtil.memPutFloat(p+160,1);MemoryUtil.memPutFloat(p+164,.9f);MemoryUtil.memPutFloat(p+168,.75f);MemoryUtil.memPutFloat(p+172,time);
-        for(int i=0;i<tuning.length;i++)MemoryUtil.memPutFloat(p+176+4L*i,tuning[i]);
+        for(int i=0;i<CameraSettings.PACKET_PARAMS;i++)MemoryUtil.memPutFloat(p+176+4L*i,tuning[i]);
+        MemoryUtil.memPutFloat(p+432,tuning[CameraSettings.FILM_GRAIN]);MemoryUtil.memPutFloat(p+436,tuning[CameraSettings.GRAIN_STRENGTH]);MemoryUtil.memPutFloat(p+440,tuning[CameraSettings.GRAIN_SIZE]);
         MemoryUtil.memPutFloat(p+412,medium);
         MemoryUtil.memPutFloat(p+416,HISTORY.direction().x());MemoryUtil.memPutFloat(p+420,HISTORY.direction().y());MemoryUtil.memPutFloat(p+424,HISTORY.direction().z());MemoryUtil.memPutFloat(p+428,HISTORY.moving()?1:0);return true;
     }

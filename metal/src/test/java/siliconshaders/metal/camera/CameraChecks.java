@@ -12,13 +12,13 @@ public final class CameraChecks {
         Path dir=Files.createTempDirectory("siliconshaders-camera-check");
         try{
             CameraSettings s=new CameraSettings(dir);require(s.mask()==0,"New install runs optional post passes");
-            int[] toggles={1,8,17,22,32,36,44,48};
+            int[] toggles={1,8,17,22,32,36,44,48,59};
             for(int i=0;i<toggles.length;i++){
                 s.reset(null);s.set(toggles[i],1);require(s.mask()==1<<i,"Effect does not independently enable its path");
                 CameraSettings reloaded=new CameraSettings(dir);require(Arrays.equals(s.snapshot(),reloaded.snapshot()),"Controls did not persist");
                 s.set(0,0);require(s.mask()==0,"Master switch did not disable all work");
             }
-            require(CameraSettings.COUNT<=59&&CameraSettings.index("godrays")==48&&CameraSettings.index("raysUnderwater")==56&&CameraSettings.index("raysVariant")==57,"Camera controls overlap runtime packet slots");
+            require(CameraSettings.PACKET_PARAMS==59&&CameraSettings.index("filmGrain")==59&&CameraSettings.COUNT==62&&CameraRuntime.BYTES==448&&CameraSettings.index("godrays")==48&&CameraSettings.index("raysUnderwater")==56&&CameraSettings.index("raysVariant")==57,"Camera controls overlap runtime packet slots");
             s.reset(null);require(CameraSettings.index("bloomVariant")==58&&!CameraSettings.PARAMS.get(58).toggle(),"Bloom selector overlaps runtime data or acts as toggle");
             require(!s.hdrBloom()&&s.value(58)==0,"HDR bloom changed old defaults");
             s.set(1,1);s.set(58,1);require(s.mask()==1&&s.hdrBloom(),"HDR selector did not preserve the bloom mask");
@@ -69,7 +69,7 @@ public final class CameraChecks {
                 },0);
             }
             require(calls.equals(List.of("siliconshaders/metal/own/WaterRuntime","siliconshaders/metal/camera/CameraRuntime")),"Camera post is not ordered after water in the before-hand hook");
-            System.out.println("PASS: eight independent effects, safe defaults, persistent/clamped/migrated settings, group resets, bilingual labels, static/moving camera reprojection, large worlds, teleport/FOV/resize/pause/world reset");
+            System.out.println("PASS: nine independent effects, safe defaults, persistent/clamped/migrated settings, group resets, bilingual labels, static/moving camera reprojection, large worlds, teleport/FOV/resize/pause/world reset");
         }finally{try(var files=Files.walk(dir)){for(Path p:files.sorted(Comparator.reverseOrder()).toList())Files.deleteIfExists(p);}}
     }
 }

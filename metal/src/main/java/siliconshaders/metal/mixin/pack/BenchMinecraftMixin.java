@@ -11,7 +11,10 @@ import org.spongepowered.asm.mixin.injection.callback.CallbackInfo;
 @Mixin(Minecraft.class)
 abstract class BenchMinecraftMixin {
     @Inject(method="runTick",at=@At("HEAD"))
-    private void siliconshaders$benchFrame(boolean advanceGameTime,CallbackInfo ci) { ShaderBench.frame((Minecraft)(Object)this); }
+    private void siliconshaders$benchFrame(boolean advanceGameTime,CallbackInfo ci) {
+        ShaderBench.frame((Minecraft)(Object)this);
+        siliconshaders.metal.settings.StartupAdvice.frame((Minecraft)(Object)this); // once, on the main menu
+    }
     @Inject(method="renderFrame",at=@At("HEAD"))
     private void siliconshaders$benchPose(boolean advanceGameTime,CallbackInfo ci) { if(ShaderBench.active())ShaderBench.beforeRender((Minecraft)(Object)this); }
 }

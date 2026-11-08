@@ -2,6 +2,10 @@
 
 ## 0.3.0-alpha.5
 
+- New start-up notice when Minecraft's settings differ from what the Standard profile is tuned for: a 1920-pixel-wide
+  picture (1920x1080 or 1920x1200), anisotropic 8x texture filtering and 4 mipmap levels. On wider screens it recommends
+  the MetalFX render resolution that renders about 1920 pixels wide; the mod never switches MetalFX on by itself.
+  Buttons: Apply, Later and Don't show again.
 - New **Standard profile**: a fresh installation starts with it, and it is the "Standard" preset in the graphics menu
   (shadows 4096, bloom, light rays, film grain and a tuned picture). Existing settings and settings imported from MCOpt
   are never replaced.

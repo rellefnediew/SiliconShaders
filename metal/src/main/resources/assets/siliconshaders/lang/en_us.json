@@ -1033,5 +1033,16 @@
   "siliconshaders.shaders.sun.tune.nebulaDeepB": "Nebula deep blue: %s",
   "siliconshaders.shaders.sun.tune.nebulaGlowR": "Nebula glow red: %s",
   "siliconshaders.shaders.sun.tune.nebulaGlowG": "Nebula glow green: %s",
-  "siliconshaders.shaders.sun.tune.nebulaGlowB": "Nebula glow blue: %s"
+  "siliconshaders.shaders.sun.tune.nebulaGlowB": "Nebula glow blue: %s",
+  "siliconshaders.advice.title": "SiliconShaders: recommended settings",
+  "siliconshaders.advice.intro": "The Standard profile is tuned for these settings. Yours differ here:",
+  "siliconshaders.advice.metalfx": "Screen %s×%s: MetalFX render resolution %s recommended (about %s pixels wide), in the graphics menu under Resolution",
+  "siliconshaders.advice.metalfxOff": "Screen %s×%s: MetalFX render resolution 100 % recommended (off), in the graphics menu under Resolution",
+  "siliconshaders.advice.resolution": "Picture %s×%s: Full HD fullscreen at %s×%s",
+  "siliconshaders.advice.filtering": "Texture filtering: Anisotropic 8x",
+  "siliconshaders.advice.mipmaps": "Mipmap levels: %s → %s",
+  "siliconshaders.advice.apply": "Apply",
+  "siliconshaders.advice.later": "Later",
+  "siliconshaders.advice.hide": "Don't show again",
+  "siliconshaders.advice.ok": "OK"
 }

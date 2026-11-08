@@ -39,6 +39,9 @@ public final class DefaultProfileChecks {
         require(new SunSettings(legacy).state().shadowSize()==1024,"Standard profile replaced imported MCOpt settings");
         require(!Files.exists(legacy.resolve("config/siliconshaders-camera.json")),"Standard profile wrote files next to imported MCOpt settings");
 
+        // MetalFX proposal for screens wider than 1920: renders about 1920 pixels wide, never clearly less.
+        int[][] scales={{1920,0},{2048,0},{2560,1},{2880,2},{3024,2},{3456,2},{3840,3},{5120,3}};
+        for(int[] s:scales)require(StartupAdvice.recommendedScale(s[0])==s[1],"MetalFX proposal for width "+s[0]+": "+StartupAdvice.recommendedScale(s[0]));
         System.out.println("PASS: Standard profile code complete and in range ("+standard.values().size()+" settings), applied and selected on a first start, never over the player's or imported MCOpt settings");
     }
 }

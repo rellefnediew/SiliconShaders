@@ -1033,5 +1033,16 @@
   "siliconshaders.shaders.sun.tune.nebulaDeepB": "Nachtnebel Tiefe Blau: %s",
   "siliconshaders.shaders.sun.tune.nebulaGlowR": "Nachtnebel Leuchten Rot: %s",
   "siliconshaders.shaders.sun.tune.nebulaGlowG": "Nachtnebel Leuchten Grün: %s",
-  "siliconshaders.shaders.sun.tune.nebulaGlowB": "Nachtnebel Leuchten Blau: %s"
+  "siliconshaders.shaders.sun.tune.nebulaGlowB": "Nachtnebel Leuchten Blau: %s",
+  "siliconshaders.advice.title": "SiliconShaders: Empfohlene Einstellungen",
+  "siliconshaders.advice.intro": "Das Standard-Profil ist auf diese Einstellungen abgestimmt. Bei dir weicht ab:",
+  "siliconshaders.advice.metalfx": "Bildschirm %s×%s: MetalFX-Renderauflösung %s empfohlen (etwa %s Pixel breit), im Grafikmenü unter Auflösung",
+  "siliconshaders.advice.metalfxOff": "Bildschirm %s×%s: MetalFX-Renderauflösung 100 % empfohlen (aus), im Grafikmenü unter Auflösung",
+  "siliconshaders.advice.resolution": "Bild %s×%s: Vollbild in Full HD mit %s×%s",
+  "siliconshaders.advice.filtering": "Texturfilter: Anisotrop 8x",
+  "siliconshaders.advice.mipmaps": "Mipmap-Stufen: %s → %s",
+  "siliconshaders.advice.apply": "Übernehmen",
+  "siliconshaders.advice.later": "Später",
+  "siliconshaders.advice.hide": "Nicht mehr anzeigen",
+  "siliconshaders.advice.ok": "OK"
 }

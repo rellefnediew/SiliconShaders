@@ -2,6 +2,9 @@
 
 ## 0.3.0-alpha.5
 
+- Faster entity shadows in the distance: while the far shadow map is reused from its cache, entities (including your
+  own first-person body) are drawn into a small image covering only their rectangle instead of copying and redrawing
+  the whole far map every frame. The result is identical texel for texel.
 - Lunar Client: your own body casts a shadow in first person again. The mod now poses and meshes the shadow body
   itself instead of submitting an extra player, so no visible copy can appear. Under Lunar the body shadow leaves out
   armor, held items and cosmetics.

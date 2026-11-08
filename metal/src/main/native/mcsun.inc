@@ -8,6 +8,8 @@ void mco_sun_debug_stats(Own *w,uint64_t *stats) { stats[0]=w->sunRenders;stats[
 
 id<MTLBuffer> mco_sun_debug_draw_args(Own *w) { return w->sunArgs; }
 int mco_sun_debug_exact(Own *w) { return w->sunExactDraw; }
+// Far-map entity layer: disable restores the original behaviour (a whole-map copy and a whole-map pass every frame); out = full copies, rectangle restores, scratch draws.
+void mco_sun_debug_far_actors(Own *w,int disable,uint64_t *out) { if(!w)return;if(disable>=0)w->sunFarActorScratchDisabled=disable;if(out){out[0]=w->sunFarActorFullCopies;out[1]=w->sunFarActorRectCopies;out[2]=w->sunFarActorScratchDraws;} }
 void mco_sun_debug_force_legacy(Own *w,int force) { w->sunForceLegacy=force!=0; }
 int mco_sun_culling(Own *w,const OwnSunCulling *data) {
     if(!data||data->count>16||!isfinite(data->nearRadius)||data->nearRadius<0||data->nearRadius>16)return -1;
@@ -285,11 +287,86 @@ static int sunEncodeMode(Own *w,Enc *enc,const void *source,id<MTLTexture> targe
     if(!w->sunArgs) { snprintf(err,cap,"Shadow draw allocation failed");return -1; }
     mc_pre_end_encoders(enc);id<MTLCommandBuffer> command=w->sunDeferred?mc_frame_cmd(enc):mc_pre(enc);
     BOOL terrain=draw&&mode!=SUN_ENCODE_ACTORS,actors=draw&&mode!=SUN_ENCODE_TERRAIN&&w->sunCasterCount;
+    if(mode!=SUN_ENCODE_ACTORS&&(uintptr_t)target==w->sunFarActorTarget)w->sunFarActorRectCount=-1; // overwritten: unknown again
+    BOOL fast=NO;MTLRegion fastRect=MTLRegionMake2D(0,0,0,0);uint8_t scratchFrame[144];int drawCount=-1;
     if(mode==SUN_ENCODE_ACTORS) {
-        id<MTLBlitCommandEncoder> copy=mc_profiled_blit(enc,command);copy.label=enc->samples?[NSString stringWithFormat:@"sun far terrain cache to level %d",level]:@"sun far terrain cache";
-        [copy copyFromTexture:base sourceSlice:0 sourceLevel:0 sourceOrigin:MTLOriginMake(0,0,0) sourceSize:MTLSizeMake(base.width,base.height,1)
-            toTexture:target destinationSlice:0 destinationLevel:0 destinationOrigin:MTLOriginMake(0,0,0)];
-        [copy endEncoding];[copy release];
+        // The map must equal the cache plus this frame's entities. While the cache is unchanged since the last layer, the
+        // map differs from it only where the previous entities were drawn: restore just those texels from the cache instead
+        // of copying the whole map (up to 64 MB per frame), then draw. Same result, texel for texel.
+        uint32_t rects[64][4];int count=0;BOOL overflow=NO;
+        simd_float4x4 clip;memcpy(&clip,frame,64);float width=(float)target.width,height=(float)target.height;
+        for(int i=0;i<w->sunCasterCount&&!overflow;i++) {
+            OwnSunCaster *batch=w->sunCasters+i;if(batch->config.x>0.5f||batch->draw.x<=0)continue;
+            simd_float3 lo=batch->boundsLo.xyz,hi=batch->boundsHi.xyz;
+            if(simd_any(lo>hi)||!isfinite(simd_reduce_add(lo)+simd_reduce_add(hi))){overflow=YES;break;}
+            float x0=INFINITY,y0=INFINITY,x1=-INFINITY,y1=-INFINITY;
+            for(int c=0;c<8;c++) {
+                // sun_actor_vs: clip * position, y mirrored; Metal maps NDC y up to texel rows down, so rows follow +clip.y.
+                simd_float4 p=simd_mul(clip,(simd_float4){c&1?hi.x:lo.x,c&2?hi.y:lo.y,c&4?hi.z:lo.z,1});
+                if(!(p.w>1e-6f)||!isfinite(p.x+p.y)){overflow=YES;break;}
+                float x=(p.x/p.w*.5f+.5f)*width,y=(p.y/p.w*.5f+.5f)*height;
+                x0=fminf(x0,x);y0=fminf(y0,y);x1=fmaxf(x1,x);y1=fmaxf(y1,y);
+            }
+            if(overflow)break;
+            x0=fmaxf(floorf(x0)-2,0);y0=fmaxf(floorf(y0)-2,0);x1=fminf(ceilf(x1)+2,width);y1=fminf(ceilf(y1)+2,height);
+            if(x1<=x0||y1<=y0)continue; // not on this map
+            if(count==64){overflow=YES;break;}
+            rects[count][0]=(uint32_t)x0;rects[count][1]=(uint32_t)y0;rects[count][2]=(uint32_t)(x1-x0);rects[count][3]=(uint32_t)(y1-y0);count++;
+        }
+        BOOL whole=w->sunFarActorScratchDisabled||w->sunFarActorRectCount<0||w->sunFarActorTarget!=(uintptr_t)target||w->sunFarActorBase!=(uintptr_t)base||w->sunFarActorSync!=w->sunFarRefreshes;
+        uint64_t area=0;for(int i=0;!whole&&i<w->sunFarActorRectCount;i++)area+=(uint64_t)w->sunFarActorRects[i][2]*w->sunFarActorRects[i][3];
+        if(area*4>(uint64_t)target.width*target.height)whole=YES; // past a quarter of the map one copy is cheaper
+        // The entities' union rectangle. Small enough: draw them into a scratch image of just that size instead of into the
+        // whole map, whose render pass would load and store every texel of it (Apple GPUs process the full attachment).
+        uint32_t ux0=UINT32_MAX,uy0=UINT32_MAX,ux1=0,uy1=0;
+        for(int i=0;i<count;i++){ux0=MIN(ux0,rects[i][0]);uy0=MIN(uy0,rects[i][1]);ux1=MAX(ux1,rects[i][0]+rects[i][2]);uy1=MAX(uy1,rects[i][1]+rects[i][3]);}
+        fast=!whole&&!overflow&&!w->sunFarActorScratchDisabled;
+        if(fast&&count){
+            fastRect=MTLRegionMake2D(ux0,uy0,ux1-ux0,uy1-uy0);
+            if((uint64_t)fastRect.size.width*fastRect.size.height*4>(uint64_t)target.width*target.height)fast=NO;
+            else if(!w->sunFarActorScratch||w->sunFarActorScratch.width<fastRect.size.width||w->sunFarActorScratch.height<fastRect.size.height) {
+                NSUInteger sw=64,sh=64;while(sw<fastRect.size.width)sw*=2;while(sh<fastRect.size.height)sh*=2;
+                MTLTextureDescriptor *td=[MTLTextureDescriptor texture2DDescriptorWithPixelFormat:target.pixelFormat width:MIN(sw,target.width) height:MIN(sh,target.height) mipmapped:NO];
+                td.storageMode=MTLStorageModePrivate;td.usage=MTLTextureUsageRenderTarget|MTLTextureUsageShaderRead;
+                id<MTLTexture> next=[w->ctx->device newTextureWithDescriptor:td];
+                if(next){[w->sunFarActorScratch release];w->sunFarActorScratch=next;}else fast=NO;
+            }
+        }
+        if(whole||w->sunFarActorRectCount>0||(fast&&count)) {
+            id<MTLBlitCommandEncoder> copy=mc_profiled_blit(enc,command);
+            if(whole) {
+                copy.label=enc->samples?[NSString stringWithFormat:@"sun far terrain cache to level %d",level]:@"sun far terrain cache";
+                [copy copyFromTexture:base sourceSlice:0 sourceLevel:0 sourceOrigin:MTLOriginMake(0,0,0) sourceSize:MTLSizeMake(base.width,base.height,1)
+                    toTexture:target destinationSlice:0 destinationLevel:0 destinationOrigin:MTLOriginMake(0,0,0)];w->sunFarActorFullCopies++;
+            } else {
+                copy.label=@"sun far terrain cache: restore previous entity texels";
+                for(int i=0;i<w->sunFarActorRectCount;i++) {
+                    const uint32_t *q=w->sunFarActorRects[i];
+                    [copy copyFromTexture:base sourceSlice:0 sourceLevel:0 sourceOrigin:MTLOriginMake(q[0],q[1],0) sourceSize:MTLSizeMake(q[2],q[3],1)
+                        toTexture:target destinationSlice:0 destinationLevel:0 destinationOrigin:MTLOriginMake(q[0],q[1],0)];
+                }
+                w->sunFarActorRectCopies++;
+            }
+            if(fast&&count)[copy copyFromTexture:base sourceSlice:0 sourceLevel:0 sourceOrigin:fastRect.origin sourceSize:fastRect.size
+                toTexture:w->sunFarActorScratch destinationSlice:0 destinationLevel:0 destinationOrigin:MTLOriginMake(0,0,0)];
+            [copy endEncoding];[copy release];
+        }
+        w->sunFarActorTarget=(uintptr_t)target;w->sunFarActorBase=(uintptr_t)base;w->sunFarActorSync=w->sunFarRefreshes;
+        if(fast){
+            // Only the union rectangle will differ from the cache.
+            w->sunFarActorRectCount=count?1:0;
+            if(count){w->sunFarActorRects[0][0]=(uint32_t)fastRect.origin.x;w->sunFarActorRects[0][1]=(uint32_t)fastRect.origin.y;w->sunFarActorRects[0][2]=(uint32_t)fastRect.size.width;w->sunFarActorRects[0][3]=(uint32_t)fastRect.size.height;}
+            // The same texel grid in the scratch image: clip x,y scaled and shifted so the rectangle fills [-1,1].
+            for(int row=0;row<2;row++) {
+                float full=row?height:width,size=(float)(row?fastRect.size.height:fastRect.size.width),start=(float)(row?fastRect.origin.y:fastRect.origin.x);
+                float scale=full/size,shift=(full-2*start)/size-1;
+                for(int column=0;column<4;column++)clip.columns[column][row]=clip.columns[column][row]*scale+clip.columns[column][3]*shift;
+            }
+            memcpy(scratchFrame,frame,144);memcpy(scratchFrame,&clip,64);
+        } else {
+            w->sunFarActorRectCount=overflow?-1:count;if(!overflow&&count)memcpy(w->sunFarActorRects,rects,sizeof(rects[0])*count);
+        }
+        drawCount=count;
     }
     if(terrain || (actors&&w->sunDeferred)) {
         id<MTLComputeCommandEncoder> c=mc_profiled_compute(enc,command,MTLDispatchTypeSerial);c.label=!enc->samples?@"sun caster cull":[NSString stringWithFormat:@"sun caster cull level %d (%u)%s",level,v[34],grouped?" [parallel]":""];
@@ -328,7 +405,8 @@ static int sunEncodeMode(Own *w,Enc *enc,const void *source,id<MTLTexture> targe
         }
         [c endEncoding];[c release];
     }
-    MTLRenderPassDescriptor *rp=[MTLRenderPassDescriptor renderPassDescriptor];rp.depthAttachment.texture=target;
+    if(fast&&drawCount==0){w->sunRenders++;return 0;} // nothing of the entities lands on this map: it equals the cache
+    MTLRenderPassDescriptor *rp=[MTLRenderPassDescriptor renderPassDescriptor];rp.depthAttachment.texture=fast?w->sunFarActorScratch:target;
     rp.depthAttachment.loadAction=mode==SUN_ENCODE_ACTORS?MTLLoadActionLoad:MTLLoadActionClear;rp.depthAttachment.clearDepth=1;rp.depthAttachment.storeAction=MTLStoreActionStore;
     id<MTLRenderCommandEncoder> r=mc_profiled_render(enc,command,rp);
     if(!r) { snprintf(err,cap,"Cannot begin shadow map");return -1; }
@@ -354,7 +432,10 @@ static int sunEncodeMode(Own *w,Enc *enc,const void *source,id<MTLTexture> targe
     }
     if(actors) {
         [r setRenderPipelineState:w->sunActorPipeline];[r setDepthStencilState:w->sunDepth];[r setDepthBias:1 slopeScale:w->sunLegacyContact?1.5f:0 clamp:w->sunLegacyContact?0.005f:0.00001f];[r setCullMode:MTLCullModeNone];
-        [r setVertexBytes:frame length:144 atIndex:0];
+        [r setVertexBytes:fast?scratchFrame:frame length:144 atIndex:0];
+        simd_float2 pixelOffset=fast?(simd_float2){(float)fastRect.origin.x,(float)fastRect.origin.y}:(simd_float2){0,0};
+        [r setFragmentBytes:&pixelOffset length:sizeof pixelOffset atIndex:6];
+        if(fast)[r setViewport:(MTLViewport){0,0,(double)fastRect.size.width,(double)fastRect.size.height,0,1}];
         for(int i=0;i<w->sunCasterCount;i++) {
             OwnSunCaster *batch=w->sunCasters+i;if(batch->config.x>0.5f||batch->draw.x<=0)continue;
             if(!sunCasterVisible(w,batch->boundsLo.xyz,batch->boundsHi.xyz))continue;
@@ -373,7 +454,14 @@ static int sunEncodeMode(Own *w,Enc *enc,const void *source,id<MTLTexture> targe
                 indexBuffer:(id<MTLBuffer>)(uintptr_t)batch->indices indexBufferOffset:(NSUInteger)batch->draw.y*(batch->draw.w?4:2) instanceCount:1 baseVertex:batch->draw.z baseInstance:0];
         }
     }
-    [r endEncoding];[r release];w->sunRenders++;return 0;
+    [r endEncoding];[r release];w->sunRenders++;
+    if(fast) {
+        id<MTLBlitCommandEncoder> back=mc_profiled_blit(enc,command);back.label=@"sun far map: entity rectangle";
+        [back copyFromTexture:w->sunFarActorScratch sourceSlice:0 sourceLevel:0 sourceOrigin:MTLOriginMake(0,0,0) sourceSize:fastRect.size
+            toTexture:target destinationSlice:0 destinationLevel:0 destinationOrigin:fastRect.origin];
+        [back endEncoding];[back release];w->sunFarActorScratchDraws++;
+    }
+    return 0;
 }
 static int sunEncode(Own *w,Enc *enc,const void *source,id<MTLTexture> target,id<MTLBuffer> arena,id<MTLBuffer> sections,
     id<MTLBuffer> recs,id<MTLTexture> atlas,id<MTLSamplerState> sampler,int level,char *err,int cap) {

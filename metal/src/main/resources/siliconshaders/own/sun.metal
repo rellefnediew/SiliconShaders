@@ -352,11 +352,13 @@ vertex SunActorVertex sun_actor_vs(uint vid [[vertex_id]],constant SunFrame &f [
     o.tint=actor.layout.w==0xffffffffu?float4(1):float4(*(device const uchar4 *)(v+actor.layout.w))/255.0;
     o.world=p;return o;
 }
+// pixelOffset: where this render target's texel (0,0) lies in the shadow map. Non-zero when the far map's entities are
+// drawn into a small image covering only their rectangle, so the fade dither stays the same texel for texel.
 fragment void sun_actor_fs(SunActorVertex in [[stage_in]],constant SunActorFrame &actor [[buffer(5)]],
-    texture2d<float> albedo [[texture(0)]],sampler source [[sampler(0)]]) {
+    texture2d<float> albedo [[texture(0)]],sampler source [[sampler(0)]],constant float2 &pixelOffset [[buffer(6)]]) {
     if(albedo.sample(source,in.uv,level(0)).a*in.tint.a<0.5)discard_fragment();
     float fade=1.0-smoothstep(actor.config.z*0.8,actor.config.z,length(in.world));
-    float noise=fract(52.9829189*fract(dot(floor(in.pos.xy),float2(0.06711056,0.00583715))));
+    float noise=fract(52.9829189*fract(dot(floor(in.pos.xy)+pixelOffset,float2(0.06711056,0.00583715))));
     if(fade<noise)discard_fragment();
 }
 fragment float4 sun_glass_fs(SunActorVertex in [[stage_in]],texture2d<float> albedo [[texture(0)]],sampler source [[sampler(0)]]) {

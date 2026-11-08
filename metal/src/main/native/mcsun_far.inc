@@ -25,7 +25,8 @@ void mco_sun_debug_far_stats(Own *w,uint64_t *stats) { stats[0]=w->sunFarRefresh
 void mco_sun_debug_far_still_texel(Own *w,float texel) { w->sunFarStillTexel=texel; }
 
 static void sunFarDrop(Own *w) {
-    [w->sunFarCache release];w->sunFarCache=nil;w->sunFarValid=0;w->sunFarMode=SUN_FAR_OFF;w->sunFarDirect=0;
+    [w->sunFarCache release];w->sunFarCache=nil;w->sunFarValid=0;w->sunFarMode=SUN_FAR_OFF;w->sunFarDirect=0;w->sunFarActorRectCount=-1;w->sunFarActorTarget=0;
+    [w->sunFarActorScratch release];w->sunFarActorScratch=nil;
 }
 // Decides this frame's far level before any cascade is encoded. On reuse, rewrites the far
 // sample's clip (first 64 bytes) in the caller's packet copy, so receivers, glass, entity casters
@@ -41,7 +42,7 @@ static int sunFarPrepare(Own *w,uint8_t *packet,int length,int cascaded,id<MTLTe
     if(2*range/(float)size>=(w->sunFarStillTexel>0?w->sunFarStillTexel:SUN_FAR_STILL_TEXEL)) { *(float *)(far+76)=0;*(float *)(far+92)=0; }
     const double *camera=(const double *)(packet+208);const float *direction=(const float *)(far+96);
     if(!w->sunFarCache || w->sunFarCache.width!=size) {
-        [w->sunFarCache release];w->sunFarCache=sunTexture(w,(int)size,err,cap);w->sunFarValid=0;
+        [w->sunFarCache release];w->sunFarCache=sunTexture(w,(int)size,err,cap);w->sunFarValid=0;w->sunFarActorRectCount=-1;w->sunFarActorTarget=0;
         if(!w->sunFarCache)return -1;
     }
     double now=CACurrentMediaTime();

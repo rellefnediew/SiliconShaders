@@ -123,6 +123,12 @@ typedef struct {
     uint64_t sunFarRevision,sunFarRevisionNow,sunFarRefreshes,sunFarReuses;
     simd_float4x4 sunFarClip;double sunFarCamera[3],sunFarTime;float sunFarDirection[3];
     uint8_t sunFarKey[32];uintptr_t sunFarAtlas;
+    // Entity layer over the far cache (SUN_ENCODE_ACTORS): the map last written that way, against which cache refresh, and
+    // the texel rectangles its entities covered. -1 rectangles: unknown, the next layer copies the whole cache.
+    uintptr_t sunFarActorTarget,sunFarActorBase;uint64_t sunFarActorSync;int sunFarActorRectCount;uint32_t sunFarActorRects[64][4];
+    uint64_t sunFarActorFullCopies,sunFarActorRectCopies,sunFarActorScratchDraws;
+    // The small depth image the entities are drawn into, covering only their rectangle (mcsun.inc, SUN_ENCODE_ACTORS).
+    id<MTLTexture> sunFarActorScratch;int sunFarActorScratchDisabled;
     // Lighting G-buffer (mcsun_gbuffer.inc): albedo and light data beside the scene color and sunRaw normals.
     int sunGbufferEnabled,sunGbuffer,sunGbufferView,sunLastLighting;
     int sunLookSet;float sunLook[3];  // exposure, saturation, contrast of the native lighting model

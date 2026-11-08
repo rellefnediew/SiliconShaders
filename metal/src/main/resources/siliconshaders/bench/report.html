@@ -1,0 +1,43 @@
+<!doctype html><html lang="de"><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>SiliconShaders Diagnose</title>
+<style>
+:root{font:15px/1.5 system-ui;color:#20252b;background:#f6f7f8}body{max-width:1400px;margin:auto;padding:32px 24px}h1{font-size:30px;margin:0}h2{font-size:20px;margin:32px 0 12px}p{max-width:85ch}button,input{font:inherit}button{padding:7px 12px;cursor:pointer}label{display:block;margin:18px 0}table{border-collapse:collapse;min-width:850px;width:100%;font-variant-numeric:tabular-nums;background:white}th,td{padding:9px 12px;border-bottom:1px solid #d9dee3;text-align:left;vertical-align:top}th{background:#e9edf0}small{display:block;color:#4d5863;max-width:80ch}.scroll{overflow:auto}#warning{color:#923600}details{margin:12px 0}summary{cursor:pointer}a{color:#0055aa}td:nth-child(n+3){text-align:right}pre{white-space:pre-wrap;font-size:12px}input:focus-visible,button:focus-visible,summary:focus-visible{outline:3px solid #1363b8;outline-offset:3px}
+</style>
+<h1>SiliconShaders Diagnose</h1><p>Framezeiten und Feature-Kosten für Apple Silicon. Kleinere Millisekundenwerte sind schneller. Die Differenz zur Standard-Variante enthält auch Messrauschen und zeitliche Drift.</p>
+<label>Weitere JSON-Berichte von anderen Macs vergleichen: <input id="files" type="file" accept=".json,application/json" multiple></label>
+<p id="warning" role="status"></p><div id="machines"></div>
+<h2>Messungen vergleichen</h2><p>„Δ Standard“ zeigt die Änderung der durchschnittlichen Framezeit innerhalb desselben Laufs. „Vergleichbar“ prüft Mod-Version, Suite, Szene, Auflösung und Einstellungen. Andere Mods und Hintergrundlast bitte zusätzlich beachten.</p>
+<div class="scroll"><table><thead><tr><th>Szene / Variante</th><th>Mac</th><th>FPS</th><th>Frame ms</th><th>p95 ms</th><th>GPU ms</th><th>CPU ms/Frame</th><th>Δ Standard ms</th><th>Vergleichbar</th></tr></thead><tbody id="rows"></tbody></table></div>
+<h2>Hinweise und GPU-Pässe</h2><p>GPU-Pass-Spannen stammen aus Stichproben, können sich überlappen und dürfen nicht addiert werden. Die Command-Buffer-Zeit entspricht keiner Messung der Hardware-Auslastung. Bildfehler werden hier nicht automatisch erkannt.</p><div id="details"></div>
+<script id="data" type="application/json">__SILICONSHADERS_DATA__</script>
+<script>
+'use strict';
+const reports=[JSON.parse(document.getElementById('data').textContent)];
+const el=(tag,text)=>{const n=document.createElement(tag);if(text!==undefined)n.textContent=text;return n;};
+const number=(v,d=2)=>typeof v==='number'&&Number.isFinite(v)?v.toFixed(d):'–';
+const canonical=v=>JSON.stringify(v&&typeof v==='object'&&!Array.isArray(v)?Object.fromEntries(Object.keys(v).sort().map(k=>[k,JSON.parse(canonical(v[k]))])):Array.isArray(v)?v.map(x=>JSON.parse(canonical(x))):v??null);
+function signature(report,row){return canonical({version:report.siliconshaders,suite:report.suiteVersion,seed:report.world?.seed,spots:report.spots,framebuffer:row.framebuffer,sun:row.sunSettings,tuning:row.tuningSettings,camera:row.cameraSettings,look:row.lookSettings,exclusive:row.exclusiveFullscreen,vsync:row.vsync,fpsLimit:row.effectiveFpsLimit,fixedWetness:row.fixedWetness,siliconshadersProperties:report.system?.siliconshadersProperties,mods:report.system?.mods,smartLeaves:report.system?.smartLeaves,mode:row.activeVideoMode,options:{ambientOcclusion:report.options?.ambientOcclusion,entityShadows:report.options?.entityShadows,mipmapLevels:report.options?.mipmapLevels,biomeBlendRadius:report.options?.biomeBlendRadius,resourcePacks:report.options?.resourcePacks,graphicsPreset:report.options?.graphicsPreset,renderDistance:report.options?.renderDistance,simulationDistance:report.options?.simulationDistance,fov:report.options?.fov}});}
+function render(){
+ const machines=document.getElementById('machines'),rows=document.getElementById('rows'),details=document.getElementById('details');[machines,rows,details].forEach(n=>n.replaceChildren());
+ const all=[];
+ reports.forEach((report,index)=>{
+  const sys=report.system??{},name=(sys.chip??'Mac')+' · '+(sys.gpuCores??'?')+' GPU · #'+(index+1);
+  machines.append(el('h2',name));machines.append(el('p',`${sys.memoryGB??'?'} GB · macOS ${sys.macos??'?'} · Java ${sys.java??'?'} · ${sys.power??'?'} · ${report.status} · ${report.completedCases??report.results.length}/${report.plannedCases??'?'} Messungen`));
+  (report.warnings??[]).forEach(w=>machines.append(el('small',w)));
+  (report.results??[]).forEach(row=>all.push({report,row,name}));
+ });
+ all.sort((a,b)=>(a.row.scene+'/'+a.row.variant).localeCompare(b.row.scene+'/'+b.row.variant));
+ all.forEach(({report,row,name})=>{
+  const key=row.scene+'/'+row.variant,others=all.filter(x=>x.row.scene===row.scene&&x.row.variant===row.variant&&x.report!==report);
+  const compatible=row.measurementValid!==false&&report.format===2&&others.every(x=>x.row.measurementValid!==false&&x.report.format===2&&signature(report,row)===signature(x.report,x.row));
+  const diagnostic=(report.diagnostics??[]).find(x=>x.scene===row.scene&&x.variant===row.variant);
+  const tr=el('tr');[key,name,number(row.fps,1),number(row.averageFrameMs),number(row.p95Ms),row.commandBuffers?number(row.gpuMs):'–',number(row.runtime?.renderThreadCpuMsPerFrame),number(diagnostic?.deltaFrameMs),others.length?(compatible?'ja':'abweichend'): 'ein Lauf'].forEach(v=>tr.append(el('td',v)));rows.append(tr);
+  const d=el('details');d.append(el('summary',name+' · '+key));
+  const notes=diagnostic?.notes??[];notes.forEach(n=>d.append(el('p',n)));
+  d.append(el('pre',JSON.stringify({renderPath:row.renderPath,scaledFrames:row.scaledFrames,upscaleFrames:row.upscaleFrames,runtime:row.runtime,gpu:row.gpuDetail},null,2)));details.append(d);
+ });
+}
+document.getElementById('files').addEventListener('change',async event=>{
+ const warnings=[];for(const file of event.target.files){try{if(file.size>64*1024*1024)throw Error('Datei größer als 64 MB');const report=JSON.parse(await file.text());if(!Array.isArray(report.results)||report.results.length>10000||report.results.some(r=>!r||typeof r.scene!=='string'||typeof r.variant!=='string')||!report.system)throw Error('Kein SiliconShaders-Bericht');reports.push(report);}catch(error){warnings.push(file.name+': '+error.message);}}
+ document.getElementById('warning').textContent=warnings.join(' · ');render();event.target.value='';
+});render();
+</script></html>

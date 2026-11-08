@@ -1,0 +1,53 @@
+{
+  "schemaVersion": 1,
+  "id": "siliconshaders",
+  "version": "${version}",
+  "name": "SiliconShaders",
+  "description": "Native Apple Metal renderer and shaders for Minecraft on Apple Silicon. Requires an Apple Silicon Mac (M1 or newer) with macOS 15 or later.",
+  "license": [
+    "Apache-2.0"
+  ],
+  "authors": [
+    "Kela",
+    "Noah Dunnagan"
+  ],
+  "contact": {
+    "homepage": "https://github.com/rellefnediew/SiliconShaders",
+    "sources": "https://github.com/rellefnediew/SiliconShaders",
+    "issues": "https://github.com/rellefnediew/SiliconShaders/issues"
+  },
+  "environment": "client",
+  "entrypoints": {
+    "preLaunch": [
+      "siliconshaders.metal.Preload"
+    ]
+  },
+  "mixins": [
+    "siliconshaders.mixins.json",
+    "siliconshaders-lod.mixins.json",
+    "siliconshaders-gen.mixins.json",
+    "siliconshaders-own.mixins.json",
+    "siliconshaders-ownmesh.mixins.json",
+    "siliconshaders-startup.mixins.json",
+    "siliconshaders-qos.mixins.json",
+    "siliconshaders-cpu.mixins.json",
+    "siliconshaders-chunk.mixins.json",
+    "siliconshaders-alloc.mixins.json",
+    "siliconshaders-chunkio.mixins.json",
+    "siliconshaders-edge.mixins.json",
+    "siliconshaders-compat.mixins.json",
+    "siliconshaders-pack.mixins.json",
+    "siliconshaders-fast.mixins.json"
+  ],
+  "depends": {
+    "fabricloader": ">=0.19.5",
+    "minecraft": "~26.3",
+    "java": ">=25"
+  },
+  "breaks": {
+    "sodium": "*",
+    "iris": "*",
+    "mcopt-metal": "*"
+  },
+  "icon": "assets/siliconshaders/textures/gui/icon.png"
+}

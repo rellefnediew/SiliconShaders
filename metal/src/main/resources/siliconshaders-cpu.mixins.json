@@ -1,0 +1,8 @@
+{
+	"required": true,
+	"package": "siliconshaders.metal.mixin.cpu",
+	"plugin": "siliconshaders.metal.mixin.cpu.CpuMixinPlugin",
+	"compatibilityLevel": "JAVA_25",
+	"client": ["LoadingFpsMixin", "EntityBoxVanillaMixin", "EntityRendererBoxInvoker", "EntityBoxAbMixin", "ModelLoopMixin", "ModelAbMixin", "AbFrameMixin", "LeashMixin", "LeashAbMixin"],
+	"injectors": { "defaultRequire": 1 }
+}

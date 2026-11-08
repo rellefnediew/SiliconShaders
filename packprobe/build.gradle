@@ -1,0 +1,40 @@
+plugins {
+    id 'application'
+}
+
+repositories { mavenCentral() }
+
+dependencies {
+    implementation platform('org.lwjgl:lwjgl-bom:3.4.3')
+    implementation 'org.lwjgl:lwjgl'
+    implementation 'org.lwjgl:lwjgl-shaderc'
+    implementation 'org.lwjgl:lwjgl-spvc'
+    runtimeOnly 'org.lwjgl:lwjgl::natives-macos-arm64'
+    runtimeOnly 'org.lwjgl:lwjgl-shaderc::natives-macos-arm64'
+    runtimeOnly 'org.lwjgl:lwjgl-spvc::natives-macos-arm64'
+    implementation 'com.google.code.gson:gson:2.14.0'
+}
+
+application {
+    mainClass = 'siliconshaders.packprobe.PackProbe'
+    applicationDefaultJvmArgs = ['--enable-native-access=ALL-UNNAMED']
+}
+
+tasks.withType(JavaCompile).configureEach { options.release = 25 }
+
+tasks.register('probeChecks', JavaExec) {
+    dependsOn testClasses
+    classpath = sourceSets.test.runtimeClasspath
+    mainClass = 'siliconshaders.packprobe.PackArchiveChecks'
+}
+// Checks run through the executable fixture suite above; there is no JUnit engine in this module.
+tasks.named('test') { enabled = false }
+check.dependsOn probeChecks
+
+tasks.register('sceneProbe', JavaExec) {
+    dependsOn classes
+    classpath = sourceSets.main.runtimeClasspath
+    mainClass = 'siliconshaders.packprobe.SceneProbe'
+    jvmArgs '--enable-native-access=ALL-UNNAMED'
+    if(project.hasProperty('scenePack')) args project.property('scenePack'),project.property('sceneOutput')
+}

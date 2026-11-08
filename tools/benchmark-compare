@@ -1,0 +1,83 @@
+#!/usr/bin/env python3
+"""Compare siliconshaders shader benchmark results side by side: FPS, 1% low and GPU time per scene and setting.
+
+Usage: tools/benchmark-compare A.json B.json [C.json ...]
+       tools/benchmark-compare --last N [--game-dir DIR]     (the newest N results of a game folder)
+The first file is the reference; the other columns show their change against it in percent.
+"""
+import argparse, json, sys
+from pathlib import Path
+
+REPO = Path(__file__).resolve().parent.parent
+
+
+def name(run: dict) -> str:
+    s = run['system']
+    label = f" {run['label']}" if run.get('label') else ''
+    return f"{str(s.get('chip', '?')).replace('Apple ', '')} {s.get('gpuCores', '?')}C{label}"
+
+
+def main() -> int:
+    a = argparse.ArgumentParser(description='compare siliconshaders benchmark results')
+    a.add_argument('files', nargs='*', type=Path)
+    a.add_argument('--last', type=int)
+    a.add_argument('--game-dir', type=Path, default=REPO / 'metal' / 'run')
+    o = a.parse_args()
+    files = list(o.files)
+    if o.last:
+        files += sorted((o.game_dir / 'siliconshaders-benchmarks').glob('*.json'))[-o.last:]
+    if len(files) < 1:
+        a.error('give result files or --last N')
+    runs = [json.loads(f.read_text()) for f in files]
+
+    for i, (f, r) in enumerate(zip(files, runs)):
+        s = r['system']
+        print(f"[{i}] {name(r)}: {f.name} | siliconshaders {r.get('siliconshaders')} | {r.get('profile')} | "
+              f"{(r.get('options') or {}).get('framebuffer', '?')} | "
+              f"{s.get('power') or '?'} | Stromsparmodus {s.get('lowPower')} | Wärme {s.get('thermal')}→{s.get('thermalEnd')} | {r.get('status')}")
+    sizes = {(r.get('options') or {}).get('framebuffer') for r in runs} - {None}
+    if len(sizes) > 1:
+        print(f"Achtung: verschiedene Auflösungen ({', '.join(sorted(sizes))}); FPS und GPU-Zeit sind so nicht direkt vergleichbar.")
+    keys = []
+    for r in runs:
+        for m in r['results']:
+            k = (m['scene'], m['variant'])
+            if k not in keys:
+                keys.append(k)
+    labels = {}
+    for r in runs:
+        for m in r['results']:
+            labels[(m['scene'], m['variant'])] = f"{m['sceneLabel']} / {m['variantLabel']}"
+    table = [{(m['scene'], m['variant']): m for m in r['results']} for r in runs]
+
+    width = max(len(v) for v in labels.values())
+    for metric, title, higher in (('fps', 'FPS', True), ('low1', '1%-Low', True), ('gpuMs', 'GPU ms/Frame', False)):
+        print(f"\n{title}")
+        print(' ' * width + ''.join(f"{'[' + str(i) + ']':>18}" for i in range(len(runs))))
+        for k in keys:
+            row = labels[k].ljust(width)
+            ref = table[0].get(k, {}).get(metric)
+            for i, t in enumerate(table):
+                v = t.get(k, {}).get(metric)
+                if v is None:
+                    row += f"{'-':>18}"
+                elif i == 0 or not ref:
+                    row += f"{v:>18.2f}" if metric == 'gpuMs' else f"{v:>18.1f}"
+                else:
+                    change = (v - ref) / ref * 100
+                    text = f"{v:.2f}" if metric == 'gpuMs' else f"{v:.1f}"
+                    row += f"{text + f' ({change:+.0f}%)':>18}"
+            print(row)
+    for i, r in enumerate(runs):
+        paths = r.get('pathSummary') or []
+        if paths:
+            print(f"\nRender-Pfade [{i}] {name(r)}")
+            for p in paths:
+                print(f"  {p.get('sceneLabel', p['scene']):<20} Shader {'an ' if p.get('shader') else 'aus'} {p['path']:<7} "
+                      f"{p['verdict']} (Rauschen {p.get('noisePercent', 0):.1f} %)")
+    print('\nGPU ms: kleiner ist besser. Prozente: Änderung gegenüber [0].')
+    return 0
+
+
+if __name__ == '__main__':
+    sys.exit(main())

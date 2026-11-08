@@ -1,0 +1,21 @@
+{
+	"required": true,
+	"package": "siliconshaders.metal.mixin.chunk",
+	"plugin": "siliconshaders.metal.mixin.chunk.ChunkMixinPlugin",
+	"compatibilityLevel": "JAVA_25",
+	"client": [
+		"PalettedContainerFactoryMixin",
+		"AcquirePoiMixin",
+		"PoiSectionAccessor",
+		"SectionStorageAccess",
+		"ServerLevelTickMixin",
+		"LevelRandAccessor",
+		"DataLayerStorageMapMixin",
+		"BlockLightMapMixin",
+		"SkyLightMapMixin",
+		"ChunkAccessSectionMixin"
+	],
+	"injectors": {
+		"defaultRequire": 1
+	}
+}

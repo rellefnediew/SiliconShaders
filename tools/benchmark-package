@@ -1,0 +1,35 @@
+#!/bin/sh
+# The benchmark for another Mac, without the repository: dist/siliconshaders-benchmark-VERSION.zip with the release jar
+# (tools/release), "Benchmark starten.command" (tools/benchmark-standalone.command) and LIESMICH.txt.
+# Send the zip (AirDrop), unzip, double-click the .command; the result .json comes back for tools/benchmark-compare.
+# Usage: tools/benchmark-package
+set -eu
+cd "$(dirname "$0")/.."
+version=$(sed -n "s/^version = '\(.*\)'$/\1/p" metal/build.gradle)
+tools/release >/dev/null
+name=siliconshaders-benchmark-$version
+rm -rf "dist/$name" "dist/$name.zip"
+mkdir -p "dist/$name"
+cp "dist/siliconshaders-$version.jar" "dist/$name/"
+cp tools/benchmark-standalone.command "dist/$name/Benchmark starten.command"
+chmod +x "dist/$name/Benchmark starten.command"
+cat > "dist/$name/LIESMICH.txt" <<EOF
+siliconshaders Shader-Benchmark $version
+
+1. Netzteil anschließen, Minecraft schließen.
+2. "Benchmark starten.command" doppelklicken.
+   Sagt macOS "nicht geöffnet werden": Systemeinstellungen > Datenschutz & Sicherheit > ganz unten "Dennoch öffnen".
+   Oder im Terminal: zsh "Pfad/zu/Benchmark starten.command" (die Datei ins Terminal ziehen).
+3. Das Skript ersetzt die siliconshaders-Version im mods-Ordner durch diese (die alte kommt nach mods-siliconshaders-backup),
+   öffnet den Launcher und wartet. Im Launcher Minecraft starten.
+4. Der Benchmark läuft von selbst im Vollbild (deine aktuelle Bildschirmauflösung, VSync aus, FPS unbegrenzt; etwa 15 Minuten) und schließt Minecraft danach.
+   Nichts drücken, Esc bricht ab. Der Mac wird dabei warm; das gehört zur Messung.
+5. Das Ergebnis (.json, .txt und .html) liegt danach auf dem Schreibtisch. Die .json zurückschicken.
+
+Deine Einstellungen (options.txt, Shader-Einstellungen) werden nicht verändert.
+Die Render-Pfade werden nur für diesen einen Start umgeschaltet; beim nächsten Spielstart ist alles wie vorher.
+Die neue SiliconShaders-Version bleibt im mods-Ordner, die alte liegt in mods-siliconshaders-backup.
+Optionen: --profile kurz|standard|voll|diagnose|pfade, --mode BxH|desktop, --window (festes Fenster 1280x800 statt Vollbild), ein Minecraft-Ordner als Pfad.
+EOF
+(cd dist && zip -qrX "$name.zip" "$name")
+echo "dist/$name.zip"

@@ -1,0 +1,318 @@
+plugins {
+	id 'net.fabricmc.fabric-loom' version "${loom_version}"
+}
+
+version = '0.3.0-alpha.3'
+base { archivesName = 'SiliconShaders' }
+
+// Share the verified archive reader/compiler with the standalone probe. Minecraft supplies LWJGL and Gson.
+sourceSets.main.java {
+    srcDir rootProject.file('packprobe/src/main/java')
+    exclude 'siliconshaders/packprobe/PackProbe.java'
+    exclude 'siliconshaders/packprobe/SceneProbe.java'
+}
+
+dependencies {
+	minecraft "com.mojang:minecraft:${minecraft_version}"
+	implementation "net.fabricmc:fabric-loader:${loader_version}"
+	// Our mesher's FRAPI path (siliconshaders.metal.own.OwnFrapi, loaded only when Fabric API's renderer API is): compile only, never bundled.
+	compileOnly "net.fabricmc.fabric-api:fabric-renderer-api-v1:17.0.15+79385d0b5d"
+	compileOnly "net.fabricmc.fabric-api:fabric-api-base:2.0.6+fcdff87f5d"
+}
+
+def nativeOut = layout.buildDirectory.dir('natives/natives')
+
+tasks.register('compileNative', Exec) {
+	def sources = ['mcmetal.m', 'mclod.m', 'lodseam.m', 'lodmesh.c', 'lodnoise.c', 'rec.m', 'mcown.m', 'mccap.m', 'mcshaderpack.m'].collect { file("src/main/native/$it") }
+	def output = nativeOut.get().file('libsiliconshaders.dylib').asFile
+	inputs.files sources, file('src/main/native/mcmetal.h'), file('src/main/native/lodmesh.h'), file('src/main/native/mcsun.inc'), file('src/main/native/mcsun_geometry.h'), file('src/main/native/mcsun_surface.h'), file('src/main/native/mcsun_surface.inc'), file('src/main/native/mcsun_receivers.inc'), file('src/main/native/mcsun_temporal.inc'), file('src/main/native/mcsun_glass.inc'), file('src/main/native/mcsun_far.inc'), file('src/main/native/mcsun_gbuffer.inc'), file('src/main/native/mcwater.inc'), file('src/main/native/mcsurface_reflection.inc'), file('src/main/native/mccamera.inc'), file('src/main/native/mcssao.inc'), file('src/main/native/mcupscale.inc'), file('src/main/native/mcsun_tuning.inc'), file('src/main/native/mcblocklight.inc'), file('src/main/native/mcaurora_noise.h'), file('src/main/native/mcsun_entities.inc')
+	outputs.file output
+	doFirst { output.parentFile.mkdirs() }
+	commandLine(['clang', '-fno-objc-arc', '-O2', '-Wall', '-arch', 'arm64', '-mmacosx-version-min=15.0', '-dynamiclib', '-install_name', '@rpath/libsiliconshaders.dylib',
+		'-framework', 'CoreGraphics', '-framework', 'CoreVideo', '-framework', 'Foundation', '-framework', 'Metal', '-framework', 'MetalFX', '-framework', 'QuartzCore', '-framework', 'ImageIO', '-o', output] + sources)
+}
+
+processResources {
+	dependsOn 'compileNative'
+	from(layout.buildDirectory.dir('natives'))
+	inputs.property 'version', version
+	filesMatching('fabric.mod.json') { expand 'version': version }
+}
+
+// Double-clicking the jar (java -jar) explains that it's a Fabric mod and how to install it.
+jar {
+	manifest { attributes 'Main-Class': 'siliconshaders.metal.InstallHelp', 'Implementation-Version': version }
+	// Apache-2.0 asks for LICENSE and NOTICE in every copy.
+	from(rootProject.file('LICENSE'))
+	from(rootProject.file('NOTICE'))
+}
+
+tasks.withType(JavaCompile).configureEach {
+	it.options.release = 25
+	// the far terrain's Vector API noise control (LodNoiseVector, opt-in -Dsiliconshaders.lod.nativeNoise=vector): loaded only when the game runs with
+	// --add-modules jdk.incubator.vector
+	if (it.name == 'compileJava') it.options.compilerArgs += ['--add-modules', 'jdk.incubator.vector']
+}
+
+loom.runs.client {
+    runDir 'run'
+    vmArgs '--enable-native-access=ALL-UNNAMED'
+    programArgs '--username', 'SiliconTest', '--width', '1280', '--height', '800'
+}
+
+tasks.register('shaderChecks', JavaExec) {
+    dependsOn testClasses
+    classpath = sourceSets.test.runtimeClasspath
+    mainClass = 'siliconshaders.metal.pack.ShaderChecks'
+    jvmArgs '--enable-native-access=ALL-UNNAMED'
+    if (project.hasProperty('shaderTestPack')) args project.property('shaderTestPack'), project.property('shaderTestOutput')
+}
+tasks.named('test') { failOnNoDiscoveredTests = false }
+check.dependsOn shaderChecks
+
+tasks.register('sunEdgeFrames', JavaExec) {
+    dependsOn testClasses
+    classpath = sourceSets.test.runtimeClasspath
+    mainClass = 'siliconshaders.metal.sun.SunEdgeFrames'
+    jvmArgs '--enable-native-access=ALL-UNNAMED'
+    args providers.gradleProperty('sunEdgeOutput').getOrElse(layout.buildDirectory.dir('sun-edge').get().asFile.absolutePath)
+}
+
+// Paired with src/test/native/sun_edge_check.m; no live game is started.
+tasks.register('sunFarFrames', JavaExec) {
+    dependsOn testClasses
+    classpath = sourceSets.test.runtimeClasspath
+    mainClass = 'siliconshaders.metal.sun.SunFarFrames'
+    jvmArgs '--enable-native-access=ALL-UNNAMED'
+    args providers.gradleProperty('sunFarOutput').getOrElse(layout.buildDirectory.dir('sun-far').get().asFile.absolutePath)
+}
+
+// SDL metadata only; no Minecraft window or video initialization.
+tasks.register('macGameModeChecks', JavaExec) {
+    dependsOn testClasses
+    classpath = sourceSets.test.runtimeClasspath
+    mainClass = 'siliconshaders.metal.MacGameModeChecks'
+    jvmArgs '--enable-native-access=ALL-UNNAMED'
+}
+
+// Pure packet checks: no Minecraft or graphics initialization.
+tasks.register('sunSurfaceChecks', JavaExec) {
+    dependsOn testClasses
+    classpath = sourceSets.test.runtimeClasspath
+    mainClass = 'siliconshaders.metal.sun.SunSurfaceChecks'
+    jvmArgs '--enable-native-access=ALL-UNNAMED'
+}
+
+tasks.register('sunCandidatesChecks', JavaExec) {
+    dependsOn testClasses
+    classpath = sourceSets.test.runtimeClasspath
+    mainClass = 'siliconshaders.metal.sun.SunCandidatesChecks'
+    jvmArgs '--enable-native-access=ALL-UNNAMED'
+}
+
+// Mesh receiver bounds: no Minecraft window or GPU initialization.
+tasks.register('sunReceiverBoundsChecks', JavaExec) {
+    dependsOn testClasses
+    classpath = sourceSets.test.runtimeClasspath
+    mainClass = 'siliconshaders.metal.sun.SunReceiverBoundsChecks'
+    jvmArgs '--enable-native-access=ALL-UNNAMED'
+}
+
+// Metadata and weather-clock checks; no Minecraft window or world is opened.
+tasks.register('windChecks', JavaExec) {
+    dependsOn testClasses
+    classpath = sourceSets.test.runtimeClasspath
+    mainClass = 'siliconshaders.metal.own.WindChecks'
+    jvmArgs '--enable-native-access=ALL-UNNAMED', '-Dsiliconshaders.own.compact=true', '-Dsiliconshaders.own.mesh=true', '-Dsiliconshaders.own.mesh.qrec=true'
+}
+
+// Shader benchmark statistics, plans, request parsing and report, without opening a game.
+tasks.register('benchChecks', JavaExec) {
+    dependsOn testClasses
+    classpath = sourceSets.test.runtimeClasspath
+    mainClass = 'siliconshaders.metal.bench.BenchChecks'
+    jvmArgs '--enable-native-access=ALL-UNNAMED'
+}
+
+check.dependsOn benchChecks
+
+// Water material/transition and bytecode hook contracts, without opening a game.
+tasks.register('waterChecks', JavaExec) {
+    dependsOn testClasses
+    classpath = sourceSets.test.runtimeClasspath
+    mainClass = 'siliconshaders.metal.own.WaterChecks'
+    jvmArgs '--enable-native-access=ALL-UNNAMED'
+}
+
+// Pure hardware-policy and configuration precedence checks; no Minecraft window.
+tasks.register('gpuTuningChecks', JavaExec) {
+    dependsOn testClasses
+    classpath = sourceSets.test.runtimeClasspath
+    mainClass = 'siliconshaders.metal.GpuTuningChecks'
+}
+check.dependsOn gpuTuningChecks
+
+// Camera controls and reprojection only; no Minecraft window.
+tasks.register('cameraChecks', JavaExec) {
+    dependsOn testClasses
+    classpath = sourceSets.test.runtimeClasspath
+    mainClass = 'siliconshaders.metal.camera.CameraChecks'
+    jvmArgs '--enable-native-access=ALL-UNNAMED'
+}
+check.dependsOn cameraChecks
+
+// The fast particle path against the actual vanilla methods; no game or window is opened.
+tasks.register('fastChecks', JavaExec) {
+    dependsOn testClasses
+    classpath = sourceSets.test.runtimeClasspath
+    mainClass = 'siliconshaders.metal.fast.FastChecks'
+    jvmArgs '--enable-native-access=ALL-UNNAMED'
+}
+check.dependsOn fastChecks
+// Smart Leaves' face rule against the real block registry, its hook target and its settings; no game or window is opened.
+tasks.register('smartLeavesChecks', JavaExec) {
+    dependsOn testClasses
+    classpath = sourceSets.test.runtimeClasspath
+    mainClass = 'siliconshaders.metal.fast.SmartLeavesChecks'
+    jvmArgs '--enable-native-access=ALL-UNNAMED'
+}
+check.dependsOn smartLeavesChecks
+// Rain and thunder lighting values (SunWeather), their packet slots and settings; no game or window is opened.
+tasks.register('weatherChecks', JavaExec) {
+    dependsOn testClasses
+    classpath = sourceSets.test.runtimeClasspath
+    mainClass = 'siliconshaders.metal.sun.SunWeatherChecks'
+    jvmArgs '--enable-native-access=ALL-UNNAMED'
+}
+check.dependsOn weatherChecks
+// When auroras, the night nebula and rainbows show (SunAtmosphere), and their packet values; no game or window is opened.
+tasks.register('atmosphereChecks', JavaExec) {
+    dependsOn testClasses
+    classpath = sourceSets.test.runtimeClasspath
+    mainClass = 'siliconshaders.metal.sun.SunAtmosphereChecks'
+    jvmArgs '--enable-native-access=ALL-UNNAMED'
+}
+check.dependsOn atmosphereChecks
+// The rain drop pipeline (SunRain) against vanilla's and its shader through the production translator; no game or window.
+tasks.register('rainChecks', JavaExec) {
+    dependsOn testClasses
+    classpath = sourceSets.test.runtimeClasspath
+    mainClass = 'siliconshaders.metal.SunRainChecks'
+    jvmArgs '--enable-native-access=ALL-UNNAMED'
+    args layout.buildDirectory.dir('rain-stages').get().asFile.absolutePath
+}
+check.dependsOn rainChecks
+// Informational throughput of the fast paths (not part of check): ./gradlew :metal:fastBench
+tasks.register('fastBench', JavaExec) {
+    dependsOn testClasses
+    classpath = sourceSets.test.runtimeClasspath
+    mainClass = 'siliconshaders.metal.fast.FastBench'
+    jvmArgs '--enable-native-access=ALL-UNNAMED'
+}
+
+// Translate the actual shipped entity/object shaders; no game or window is opened.
+tasks.register('entityChecks', JavaExec) {
+    dependsOn testClasses
+    classpath = sourceSets.test.runtimeClasspath
+    mainClass = 'siliconshaders.metal.SunEntityChecks'
+    jvmArgs '--enable-native-access=ALL-UNNAMED'
+    args layout.buildDirectory.dir('entity-stages').get().asFile.absolutePath
+}
+check.dependsOn entityChecks
+
+// Configuration compatibility and real world-pass ordering; no Minecraft window.
+tasks.register('ssaoChecks', JavaExec) {
+    dependsOn testClasses
+    classpath = sourceSets.test.runtimeClasspath
+    mainClass = 'siliconshaders.metal.own.SsaoChecks'
+}
+check.dependsOn ssaoChecks
+
+// Actual block registry/state coverage, live controls and sorted quad/QREC metadata.
+tasks.register('surfaceMaterialChecks', JavaExec) {
+    dependsOn testClasses
+    classpath = sourceSets.test.runtimeClasspath
+    mainClass = 'siliconshaders.metal.own.SurfaceMaterialChecks'
+    jvmArgs '--enable-native-access=ALL-UNNAMED', '-Dsiliconshaders.own.compact=true', '-Dsiliconshaders.own.mesh=true', '-Dsiliconshaders.own.mesh.qrec=true', '-Dsiliconshaders.own.mesh.order=cell'
+}
+check.dependsOn surfaceMaterialChecks
+
+// Uses the real RenderPearl frontend validation and the Metal backend without a game window.
+tasks.register('hdrPipelineChecks', JavaExec) {
+    dependsOn testClasses, processResources
+    classpath = sourceSets.test.runtimeClasspath
+    mainClass = 'siliconshaders.metal.HdrPipelineChecks'
+    jvmArgs '--enable-native-access=ALL-UNNAMED'
+    environment 'MTL_DEBUG_LAYER', '1'
+}
+
+tasks.register('sunFogChecks', JavaExec) {
+    dependsOn testClasses
+    classpath = sourceSets.test.runtimeClasspath
+    mainClass = 'siliconshaders.metal.sun.SunFogChecks'
+    jvmArgs '--enable-native-access=ALL-UNNAMED'
+}
+check.dependsOn sunFogChecks
+
+tasks.register('reflectionReceiverChecks', JavaExec) {
+    dependsOn testClasses
+    classpath = sourceSets.test.runtimeClasspath
+    mainClass = 'siliconshaders.metal.own.ReflectionReceiverChecks'
+    jvmArgs '--enable-native-access=ALL-UNNAMED', '-Dsiliconshaders.own.compact=true', '-Dsiliconshaders.own.mesh=true', '-Dsiliconshaders.own.mesh.qrec=true', '-Dsiliconshaders.own.mesh.order=cell'
+}
+check.dependsOn reflectionReceiverChecks
+
+tasks.register('rainMotionChecks', JavaExec) {
+    dependsOn testClasses
+    classpath = sourceSets.test.runtimeClasspath
+    mainClass = 'siliconshaders.metal.sun.RainMotionChecks'
+    jvmArgs '--enable-native-access=ALL-UNNAMED'
+}
+check.dependsOn rainMotionChecks
+
+// Profile portability, live menu sessions and rollback-capable settings persistence; no world or graphics startup.
+tasks.register('graphicsMenuChecks', JavaExec) {
+    dependsOn testClasses
+    classpath = sourceSets.test.runtimeClasspath
+    mainClass = 'siliconshaders.metal.settings.GraphicsMenuChecks'
+    jvmArgs '--enable-native-access=ALL-UNNAMED'
+}
+
+check.dependsOn graphicsMenuChecks
+
+// Packet ABI, profile persistence and the two sprite hooks; no Minecraft window.
+tasks.register('celestialChecks', JavaExec) {
+    dependsOn testClasses
+    classpath = sourceSets.test.runtimeClasspath
+    mainClass = 'siliconshaders.metal.sun.SunCelestialChecks'
+    jvmArgs '--enable-native-access=ALL-UNNAMED'
+}
+check.dependsOn celestialChecks
+
+tasks.register('moonEmissionChecks', JavaExec) {
+    dependsOn testClasses
+    classpath = sourceSets.test.runtimeClasspath
+    mainClass = 'siliconshaders.metal.sun.MoonEmissionChecks'
+    jvmArgs '--enable-native-access=ALL-UNNAMED'
+    args layout.buildDirectory.file('moon-emission/fixtures.bin').get().asFile.absolutePath
+}
+check.dependsOn moonEmissionChecks
+
+// Product-rename upgrade contracts; no game window and no user preferences touched.
+tasks.register('brandMigrationChecks', JavaExec) {
+    dependsOn testClasses, processResources
+    classpath = sourceSets.test.runtimeClasspath
+    mainClass = 'siliconshaders.metal.BrandMigrationChecks'
+    if (project.hasProperty('legacyProfileCode')) args project.property('legacyProfileCode')
+}
+check.dependsOn brandMigrationChecks
+
+// Dimension routing and real SunFrames packets, without opening Minecraft.
+tasks.register('dimensionChecks', JavaExec) {
+    dependsOn testClasses
+    classpath = sourceSets.test.runtimeClasspath
+    mainClass = 'siliconshaders.metal.sun.SunDimensionChecks'
+    jvmArgs '--enable-native-access=ALL-UNNAMED'
+    args layout.buildDirectory.dir('dimension-frames').get().asFile.absolutePath
+}
+check.dependsOn dimensionChecks

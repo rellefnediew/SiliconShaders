@@ -1,0 +1,8 @@
+{
+	"required": true,
+	"package": "siliconshaders.metal.mixin.ownmesh",
+	"plugin": "siliconshaders.metal.mixin.ownmesh.OwnMeshMixinPlugin",
+	"compatibilityLevel": "JAVA_25",
+	"client": ["OwnMeshCompilerMixin", "OwnMeshResultsMixin", "OwnMeshCompiledMixin", "OwnMeshLighterCacheMixin", "OwnMeshRegionAccessMixin", "OwnMeshSectionCopyMixin", "OwnMeshTintMixin", "OwnMeshRegionStateMixin"],
+	"injectors": { "defaultRequire": 1 }
+}

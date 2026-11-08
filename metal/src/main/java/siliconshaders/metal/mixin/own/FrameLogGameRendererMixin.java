@@ -1,0 +1,33 @@
+package siliconshaders.metal.mixin.own;
+
+import siliconshaders.metal.FrameLog;
+import net.minecraft.client.DeltaTracker;
+import net.minecraft.client.renderer.GameRenderer;
+import org.spongepowered.asm.mixin.Mixin;
+import org.spongepowered.asm.mixin.injection.At;
+import org.spongepowered.asm.mixin.injection.Inject;
+import org.spongepowered.asm.mixin.injection.callback.CallbackInfo;
+
+/** Measurement only (-Dsiliconshaders.own.int.frameLog): the frame's extract and render times. */
+@Mixin(GameRenderer.class)
+public class FrameLogGameRendererMixin {
+	@Inject(method = "extract", at = @At("HEAD"))
+	private void siliconshaders$frameLogExtractHead(DeltaTracker deltaTracker, boolean advance, CallbackInfo ci) {
+		FrameLog.begin(FrameLog.EXTRACT);
+	}
+
+	@Inject(method = "extract", at = @At("RETURN"))
+	private void siliconshaders$frameLogExtractReturn(DeltaTracker deltaTracker, boolean advance, CallbackInfo ci) {
+		FrameLog.end(FrameLog.EXTRACT);
+	}
+
+	@Inject(method = "render", at = @At("HEAD"))
+	private void siliconshaders$frameLogRenderHead(CallbackInfo ci) {
+		FrameLog.begin(FrameLog.RENDER);
+	}
+
+	@Inject(method = "render", at = @At("RETURN"))
+	private void siliconshaders$frameLogRenderReturn(CallbackInfo ci) {
+		FrameLog.end(FrameLog.RENDER);
+	}
+}

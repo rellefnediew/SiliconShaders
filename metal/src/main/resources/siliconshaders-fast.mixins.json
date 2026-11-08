@@ -1,0 +1,15 @@
+{
+  "required": true,
+  "package": "siliconshaders.metal.mixin.fast",
+  "compatibilityLevel": "JAVA_25",
+  "client": [
+    "FastBlitMixin",
+    "FastFluidLightMixin",
+    "FastGlyphMixin",
+    "FastParticleMixin",
+    "SmartLeavesMixin"
+  ],
+  "injectors": {
+    "defaultRequire": 1
+  }
+}

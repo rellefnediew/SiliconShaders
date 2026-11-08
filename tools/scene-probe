@@ -1,0 +1,19 @@
+#!/bin/sh
+# Offline translation and Metal pipeline check; does not launch Minecraft or install the generated files.
+set -eu
+if [ "$#" -ne 2 ]; then
+    echo 'Usage: tools/scene-probe PACK.zip OUTPUT_DIR' >&2
+    exit 2
+fi
+task_pack=$1
+task_output=$2
+case "$task_pack" in /*) ;; *) task_pack="$PWD/$task_pack" ;; esac
+case "$task_output" in /*) ;; *) task_output="$PWD/$task_output" ;; esac
+cd "$(dirname "$0")/.."
+./gradlew :packprobe:check :packprobe:sceneProbe :metal:compileNative \
+    "-PscenePack=$task_pack" "-PsceneOutput=$task_output" --console=plain
+clang -fno-objc-arc -O2 -Wall -framework Foundation -framework Metal \
+    -I metal/src/main/native packprobe/native/library_check.m \
+    -L metal/build/natives/natives -lmcmetal \
+    "-Wl,-rpath,$PWD/metal/build/natives/natives" -o "$task_output/library_check"
+"$task_output/library_check" "$task_output/translation-report.json" "$task_output/metal-check.json"

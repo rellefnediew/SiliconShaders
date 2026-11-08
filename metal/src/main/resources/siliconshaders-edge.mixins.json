@@ -1,0 +1,9 @@
+{
+	"required": true,
+	"package": "siliconshaders.metal.mixin.edge",
+	"plugin": "siliconshaders.metal.mixin.edge.EdgeMixinPlugin",
+	"compatibilityLevel": "JAVA_25",
+	"mixins": ["GenSignalMixin"],
+	"client": ["FramerateCapMixin"],
+	"injectors": { "defaultRequire": 1 }
+}

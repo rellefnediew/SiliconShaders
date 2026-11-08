@@ -1,0 +1,40 @@
+name: Bug or crash
+description: Something looks wrong, runs badly or the game crashes.
+labels: [bug]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for reporting! Please fill in what you can. English or German is fine.
+  - type: input
+    id: version
+    attributes:
+      label: SiliconShaders version
+      description: The number in the JAR file name, e.g. 0.3.0-alpha.3
+    validations:
+      required: true
+  - type: input
+    id: mac
+    attributes:
+      label: Mac and macOS version
+      description: e.g. MacBook Air M2, macOS 15.6
+    validations:
+      required: true
+  - type: textarea
+    id: what
+    attributes:
+      label: What happened?
+      description: What did you do, what did you expect, and what happened instead? Screenshots help a lot.
+    validations:
+      required: true
+  - type: textarea
+    id: mods
+    attributes:
+      label: Other mods
+      description: List the other mods in your mods folder, or write "none".
+  - type: input
+    id: log
+    attributes:
+      label: Crash report or log
+      description: |
+        Upload the crash report (crash-reports folder) or logs/latest.log to https://mclo.gs and paste the link here.

@@ -1,0 +1,27 @@
+#!/bin/sh
+# CPU packet contracts and offscreen tests of the production native Metal path. No game window.
+set -eu
+cd "$(dirname "$0")/.."
+./gradlew :metal:dimensionChecks :metal:entityChecks :metal:compileNative --console=plain
+mkdir -p build/dimension-tests
+native="$PWD/metal/build/natives/natives"
+for test in dimension_check dimension_transition_check weather_sky_check night_stars_check fog_height_check entity_lighting_check underwater_half_check water_check; do
+    clang -fno-objc-arc -O2 -arch arm64 -mmacosx-version-min=15.0 \
+        -I metal/src/main/native -I metal/src/test/native "metal/src/test/native/$test.m" \
+        -L "$native" -lsiliconshaders -Wl,-rpath,"$native" \
+        -framework Foundation -framework Metal -framework MetalFX -framework QuartzCore -framework CoreGraphics -framework ImageIO -o "build/dimension-tests/$test"
+done
+terrain=metal/src/main/resources/siliconshaders/own/terrain.metal
+sun=metal/src/main/resources/siliconshaders/own/sun.metal
+export MTL_DEBUG_LAYER=1
+build/dimension-tests/dimension_check "$terrain" "$sun"
+build/dimension-tests/dimension_transition_check "$terrain" "$sun" metal/build/dimension-frames
+build/dimension-tests/weather_sky_check "$terrain" "$sun"
+build/dimension-tests/night_stars_check "$terrain" "$sun"
+build/dimension-tests/fog_height_check "$terrain" "$sun"
+build/dimension-tests/entity_lighting_check metal/build/entity-stages
+build/dimension-tests/underwater_half_check "$terrain" "$sun"
+# The native underwater path in both forms and at every preset, under API validation.
+mkdir -p metal/build/water-images metal/build/water-images-half
+build/dimension-tests/water_check "$terrain" "$sun" metal/build/water-images
+for preset in 0,0,1 0,1,1 0,2,1; do SILICONSHADERS_WATER_QUALITY=$preset build/dimension-tests/water_check "$terrain" "$sun" metal/build/water-images-half; done

@@ -1,0 +1,119 @@
+#!/usr/bin/env python3
+"""Run the siliconshaders shader benchmark: writes the request, starts Minecraft, waits for the result and prints it.
+
+Usage: tools/benchmark [--profile kurz|standard|voll|diagnose|pfade] [--seconds N] [--label NAME] [--scenes A,B] [--variants A,B]
+                       [--app PATH.app] [--game-dir DIR] [--no-launch] [--keep-window | --fullscreen [WxH]]
+                       [--timeout-min N]
+
+Default: the test app next to the repository (work/test-app/SiliconShaders Shader Test.app) and its game folder.
+--no-launch only writes the request into DIR/config/siliconshaders-benchmark.json: start Minecraft yourself (for example the
+official launcher with ~/Library/Application Support/minecraft as DIR) and the benchmark runs at the title screen.
+--fullscreen: exclusive fullscreen in display mode WxH (for example --fullscreen 1900x1020); desktop: plain fullscreen at the display's own resolution.
+Default: exclusive fullscreen, 1920x1200 physical pixels (pfade: desktop), VSync off, unlimited FPS. The game's console goes to DIR/siliconshaders-benchmarks/console.log.
+Results: DIR/siliconshaders-benchmarks/<time>-<chip>[-label].json and .txt; compare runs with tools/benchmark-compare.
+"""
+import argparse, json, os, re, subprocess, sys, time
+from pathlib import Path
+
+REPO = Path(__file__).resolve().parent.parent
+DEFAULT_APP = REPO.parent / 'test-app' / 'SiliconShaders Shader Test.app'
+
+
+def game_dir_of(app: Path) -> Path:
+    for cfg in (app / 'Contents' / 'app').glob('*.cfg'):
+        lines = cfg.read_text().splitlines()
+        for i, line in enumerate(lines):
+            if line.strip() == 'arguments=--gameDir' and i + 1 < len(lines):
+                return Path(lines[i + 1].split('=', 1)[1])
+    sys.exit(f'No --gameDir in the launcher config of {app}; pass --game-dir.')
+
+
+def running(app: Path) -> bool:
+    return subprocess.run(['pgrep', '-f', str(app / 'Contents' / 'MacOS')], capture_output=True).returncode == 0
+
+
+def power() -> str:
+    out = subprocess.run(['pmset', '-g', 'batt'], capture_output=True, text=True).stdout
+    return 'Netzteil' if 'AC Power' in out else 'Akku' if 'Battery Power' in out else ''
+
+
+def main() -> int:
+    a = argparse.ArgumentParser(description='siliconshaders shader benchmark')
+    a.add_argument('--profile', default='standard', choices=['kurz', 'standard', 'voll', 'diagnose', 'pfade'])
+    a.add_argument('--seconds', type=int)
+    a.add_argument('--label', default='')
+    a.add_argument('--scenes', help='only these scenes, comma separated: land,wald,wasser,unterwasser,nacht,land-ende')
+    a.add_argument('--variants', help='only these variants, comma separated (variant ids)')
+    a.add_argument('--app', type=Path, default=DEFAULT_APP)
+    a.add_argument('--game-dir', type=Path)
+    a.add_argument('--no-launch', action='store_true')
+    a.add_argument('--keep-window', action='store_true', help='keep the window size instead of the fixed 1280x800')
+    a.add_argument('--fullscreen', nargs='?', const='', metavar='WxH', help='exclusive fullscreen in display mode WxH, or desktop for plain fullscreen')
+    a.add_argument('--timeout-min', type=float, default=90)
+    o = a.parse_args()
+
+    launch = not o.no_launch
+    if launch and not o.app.is_dir():
+        sys.exit(f'No app at {o.app}; pass --app, or --no-launch with --game-dir.')
+    game = (o.game_dir or (game_dir_of(o.app) if o.app.is_dir() else None))
+    if game is None:
+        sys.exit('Pass --game-dir.')
+    game = game.expanduser().resolve()
+    if launch and running(o.app):
+        sys.exit('Minecraft (this app) is already running; close it first.')
+
+    request = {'profile': o.profile, 'label': o.label, 'quit': launch, 'power': power(),
+               'window': 'keep' if o.keep_window else 'fullscreen'}
+    if not o.keep_window:
+        mode=o.fullscreen or ('desktop' if o.profile == 'pfade' else '1920x1200')
+        if mode != 'desktop' and not re.fullmatch(r'\d{3,5}x\d{3,5}', mode):
+            sys.exit('--fullscreen takes WxH, for example 1900x1020, or desktop')
+        request['mode'] = mode
+    if o.scenes:
+        request['scenes'] = o.scenes.split(',')
+    if o.variants:
+        request['variants'] = o.variants.split(',')
+    if o.seconds:
+        request['seconds'] = o.seconds
+    (game / 'config').mkdir(parents=True, exist_ok=True)
+    (game / 'config' / 'siliconshaders-benchmark.json').write_text(json.dumps(request) + '\n')
+    results = game / 'siliconshaders-benchmarks'
+    before = {p.name for p in results.glob('*.json')} if results.is_dir() else set()
+    if request['power'] == 'Akku':
+        print('Hinweis: der Mac läuft auf Akku; für vergleichbare Werte das Netzteil anschließen.')
+    if not launch:
+        print(f'Anfrage geschrieben: {game / "config" / "siliconshaders-benchmark.json"}')
+        print('Jetzt Minecraft starten; der Benchmark beginnt am Titelbildschirm.')
+        return 0
+
+    print(f'Starte {o.app.name} (Profil {o.profile}); bitte während des Laufs nichts im Spiel drücken, Esc bricht ab.')
+    results.mkdir(parents=True, exist_ok=True)
+    console = results / 'console.log'
+    subprocess.run(['open', '-n', '--stdout', str(console), '--stderr', str(console), str(o.app)], check=True)
+    started = time.time()
+    seen = False
+    while True:
+        time.sleep(5)
+        new = sorted(p for p in results.glob('*.json') if p.name not in before) if results.is_dir() else []
+        if new:
+            # The game writes .json and .txt, then quits by itself.
+            txt = new[-1].with_suffix('.txt')
+            for _ in range(24):
+                if txt.exists():
+                    break
+                time.sleep(0.5)
+            print(txt.read_text() if txt.exists() else new[-1].read_text())
+            print(f'Ergebnis: {new[-1]}')
+            return 0 if json.loads(new[-1].read_text()).get('status') == 'ok' else 1
+        alive = running(o.app)
+        seen = seen or alive
+        if seen and not alive:
+            print(f'Minecraft wurde ohne Ergebnis beendet; siehe {results / "console.log"}', file=sys.stderr)
+            return 1
+        if time.time() - started > o.timeout_min * 60:
+            print(f'Kein Ergebnis nach {o.timeout_min:g} min.', file=sys.stderr)
+            return 1
+
+
+if __name__ == '__main__':
+    sys.exit(main())

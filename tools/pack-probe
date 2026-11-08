@@ -1,0 +1,29 @@
+#!/bin/sh
+# Read an existing shader ZIP, compile its overworld final pass, and run an isolated Metal GPU check.
+set -eu
+if [ "$#" -lt 2 ] || [ "$#" -gt 3 ]; then
+    echo 'Usage: tools/pack-probe PACK.zip OUTPUT_DIR [SETTINGS.txt]' >&2
+    exit 1
+fi
+task_pack=$1
+task_output=$2
+task_settings=${3-}
+case "$task_pack" in /*) ;; *) task_pack="$PWD/$task_pack" ;; esac
+case "$task_output" in /*) ;; *) task_output="$PWD/$task_output" ;; esac
+if [ -n "$task_settings" ]; then
+    case "$task_settings" in /*) ;; *) task_settings="$PWD/$task_settings" ;; esac
+fi
+cd "$(dirname "$0")/.."
+./gradlew :packprobe:check :packprobe:installDist --console=plain
+if [ -n "$task_settings" ]; then
+    packprobe/build/install/packprobe/bin/packprobe "$task_pack" "$task_output" "$task_settings"
+else
+    packprobe/build/install/packprobe/bin/packprobe "$task_pack" "$task_output"
+fi
+clang -fobjc-arc -O2 -Wall -Wextra -framework Foundation -framework Metal packprobe/native/metal_probe.m -o "$task_output/metal_probe"
+{
+    "$task_output/metal_probe" "$task_output/manifest.json" "$task_output/probe-a.ppm"
+    "$task_output/metal_probe" "$task_output/manifest.json" "$task_output/probe-b.ppm" 170 90 35
+    "$task_output/metal_probe" "$task_output/manifest.json" "$task_output/probe-pattern.ppm" --checkerboard
+} > "$task_output/gpu-checks.txt"
+cat "$task_output/gpu-checks.txt"

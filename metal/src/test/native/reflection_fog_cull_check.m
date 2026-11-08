@@ -1,0 +1,29 @@
+// Production coarse-trace visibility predicate against an independent full-size bilinear-consumer oracle.
+#include "sun_test_common.h"
+typedef struct {uint32_t enabled,srgb;float exposure,saturation,contrast,moon,pad[2];simd_float4 env,p[19],hand[3],materials[4],aurora[3];} Lighting;
+typedef struct {simd_float4x4 view,inverse;simd_float4 sun,fog,state,camera,screen,controls,waves,optics,effects,quality;} Water;
+static id<MTLTexture> texture(Ctx *c,int w,int h,MTLPixelFormat fmt,BOOL target){MTLTextureDescriptor *d=[MTLTextureDescriptor texture2DDescriptorWithPixelFormat:fmt width:w height:h mipmapped:NO];d.storageMode=MTLStorageModeShared;d.usage=MTLTextureUsageShaderRead|(target?MTLTextureUsageRenderTarget:0);return[c->device newTextureWithDescriptor:d];}
+int main(int argc,const char **argv){@autoreleasepool{
+ require(argc==3,@"Usage: reflection_fog_cull_check TERRAIN SUN");NSString *src=[[NSString stringWithContentsOfFile:@(argv[1]) encoding:NSUTF8StringEncoding error:nil] stringByAppendingString:[NSString stringWithContentsOfFile:@(argv[2]) encoding:NSUTF8StringEncoding error:nil]];
+ src=[src stringByAppendingString:@"\nfragment float4 reflection_fog_probe_fs(float4 pos[[position]],constant WaterFrame &f[[buffer(0)]],constant SunLighting &l[[buffer(1)]],constant Fog &fog[[buffer(2)]],depth2d<float> depth[[texture(0)]],texture2d<float> data[[texture(1)]],texture2d<float> normals[[texture(2)]]){uint2 s=uint2(pos.xy),at=min(uint2(pos.xy/f.screen.zw*f.screen.xy),uint2(f.screen.xy)-1);float3 p;waterWorld((float2(at)+.5)/f.screen.xy,depth.read(at),f,p);return float4(surfaceReflectionHidden(s,7,normals.read(at),p,f,l,fog,depth,data,normals)?1:0,0,0,1);}\n"];
+ char name[256],err[16384];Ctx *ctx=mc_create(name,sizeof name,err,sizeof err);require(ctx!=NULL,@(err));Enc *enc=mc_enc_new(ctx);NSError *issue=nil;MTLCompileOptions *opts=[MTLCompileOptions new];opts.languageVersion=MTLLanguageVersion3_0;id<MTLLibrary> lib=[ctx->device newLibraryWithSource:src options:opts error:&issue];require(lib!=nil,issue.localizedDescription);MTLRenderPipelineDescriptor *pd=[MTLRenderPipelineDescriptor new];pd.vertexFunction=[lib newFunctionWithName:@"sun_screen_vs"];pd.fragmentFunction=[lib newFunctionWithName:@"reflection_fog_probe_fs"];pd.colorAttachments[0].pixelFormat=MTLPixelFormatRGBA32Float;id<MTLRenderPipelineState> pipeline=[ctx->device newRenderPipelineStateWithDescriptor:pd error:&issue];require(pipeline!=nil,issue.localizedDescription);
+ int checks=0,skipped=0,cases=0;
+ for(int size=0;size<3;size++)for(int resolution=0;resolution<3;resolution++)for(int pattern=0;pattern<8;pattern++){
+  int w=size==0?31:size==1?32:65,h=size==0?23:size==1?24:47,divisor=1<<resolution,tw=(w+divisor-1)/divisor,th=(h+divisor-1)/divisor;
+  id<MTLTexture> depth=texture(ctx,w,h,MTLPixelFormatDepth32Float,NO),data=texture(ctx,w,h,MTLPixelFormatRGBA32Float,NO),normals=texture(ctx,w,h,MTLPixelFormatRGBA32Float,NO),target=texture(ctx,tw,th,MTLPixelFormatRGBA32Float,YES);float *z=calloc(w*h,4),*d=calloc(w*h,16),*n=calloc(w*h,16);
+  for(int y=0;y<h;y++)for(int x=0;x<w;x++){int i=y*w+x;BOOL hole=x==w/2&&y==h/2;z[i]=.5;d[i*4+2]=7.f/255;d[i*4+3]=pattern==4?0:1;n[i*4+1]=1;
+   n[i*4+3]=pattern==0?0:pattern==2&&hole?0:pattern==3&&hole?1.f-1.f/1048576:pattern==5&&x<w/2?0:pattern==6?((x+y)&1):1;
+   if(pattern==7&&hole){d[i*4+2]=2.f/255;n[i*4+3]=0;}
+  }
+  [depth replaceRegion:MTLRegionMake2D(0,0,w,h) mipmapLevel:0 withBytes:z bytesPerRow:w*4];[data replaceRegion:MTLRegionMake2D(0,0,w,h) mipmapLevel:0 withBytes:d bytesPerRow:w*16];[normals replaceRegion:MTLRegionMake2D(0,0,w,h) mipmapLevel:0 withBytes:n bytesPerRow:w*16];
+  Water f={.view=matrix_identity_float4x4,.inverse=matrix_identity_float4x4,.screen={w,h,tw,th}};Lighting l={0};l.materials[3].w=1;float fog[10]={0,0,0,1,1000,2000,1000,2000,1000,2000},clear[5]={0};id<MTLTexture> colors[]={target};mc_render_begin(enc,1,colors,clear,nil,0,0,tw,th);[enc->render setRenderPipelineState:pipeline];[enc->render setCullMode:MTLCullModeNone];[enc->render setFragmentBytes:&f length:sizeof f atIndex:0];[enc->render setFragmentBytes:&l length:sizeof l atIndex:1];[enc->render setFragmentBytes:fog length:sizeof fog atIndex:2];[enc->render setFragmentTexture:depth atIndex:0];[enc->render setFragmentTexture:data atIndex:1];[enc->render setFragmentTexture:normals atIndex:2];[enc->render drawPrimitives:MTLPrimitiveTypeTriangle vertexStart:0 vertexCount:3];id<MTLCommandBuffer> cmd=mc_enc_commit(enc);[cmd waitUntilCompleted];require(cmd.status==MTLCommandBufferStatusCompleted,cmd.error.localizedDescription);
+  float *result=malloc(tw*th*16);[target getBytes:result bytesPerRow:tw*16 fromRegion:MTLRegionMake2D(0,0,tw,th) mipmapLevel:0];int culled=0;
+  for(int sy=0;sy<th;sy++)for(int sx=0;sx<tw;sx++){BOOL drop=result[(sy*tw+sx)*4]>.5;if(drop){culled++;for(int y=0;y<h;y++)for(int x=0;x<w;x++){
+    // Invert the composition's bilinear support, rather than copying the shader's footprint bounds.
+    double px=(x+.5)/w*tw-.5,py=(y+.5)/h*th-.5;if(fabs(px-sx)>1.000001||fabs(py-sy)>1.000001)continue;int i=y*w+x;if(d[i*4+2]!=7.f/255)continue;
+    require(n[i*4+3]>=1||d[i*4+3]<=0,[NSString stringWithFormat:@"Visible HDR/partial-fog consumer lost: size %d res %d pattern %d source %d/%d pixel %d/%d",size,resolution,pattern,sx,sy,x,y]);
+  }}checks++;}
+  if(pattern==0)require(culled==0,@"Clear receivers were culled");if(pattern==1||pattern==4)require(culled==tw*th,@"Opaque fog/faded receivers still trace");skipped+=culled;cases++;free(result);free(z);free(d);free(n);[depth release];[data release];[normals release];[target release];
+ }
+ printf("PASS: %d coarse-fog fixtures, %d trace pixels, %d proven hidden; full/half/quarter, odd sizes, holes, tiny HDR transmission, chunk fade and unrelated materials; no visible bilinear consumer culled\n",cases,checks,skipped);return 0;
+}}

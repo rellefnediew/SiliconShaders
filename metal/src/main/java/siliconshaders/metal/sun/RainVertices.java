@@ -1,0 +1,20 @@
+package siliconshaders.metal.sun;
+
+import com.mojang.blaze3d.vertex.VertexConsumer;
+
+/** Reused only around the rain columns. Snow, collisions, lighting and vertex count remain vanilla. */
+final class RainVertices implements VertexConsumer {
+    private VertexConsumer target;private final RainMotion motion;private float y;
+    RainVertices(RainMotion motion){this.motion=motion;}
+    VertexConsumer bind(VertexConsumer target){this.target=target;return this;}
+    void clear(){target=null;}
+    public VertexConsumer addVertex(float x,float y,float z){this.y=y;target.addVertex(x,y,z);return this;}
+    public VertexConsumer setUv(float u,float v){target.setUv(motion.u(u,y),motion.v(v));return this;}
+    public VertexConsumer setColor(int color){target.setColor(color);return this;}
+    public VertexConsumer setColor(int r,int g,int b,int a){target.setColor(r,g,b,a);return this;}
+    public VertexConsumer setUv1(int u,int v){target.setUv1(u,v);return this;}
+    public VertexConsumer setUv2(int u,int v){target.setUv2(u,v);return this;}
+    public VertexConsumer setUv3(float u,float v){target.setUv3(u,v);return this;}
+    public VertexConsumer setNormal(float x,float y,float z){target.setNormal(x,y,z);return this;}
+    public VertexConsumer setLineWidth(float w){target.setLineWidth(w);return this;}
+}

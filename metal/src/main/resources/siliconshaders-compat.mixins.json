@@ -1,0 +1,8 @@
+{
+	"required": false,
+	"package": "siliconshaders.metal.mixin.compat",
+	"plugin": "siliconshaders.metal.mixin.compat.CompatMixinPlugin",
+	"compatibilityLevel": "JAVA_25",
+	"client": ["DhRenderApiMixin"],
+	"injectors": { "defaultRequire": 0 }
+}
